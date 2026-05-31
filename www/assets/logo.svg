@@ -49,16 +49,16 @@
 
   <!-- "dnsmasq" — bold, gradient fill -->
   <text
-    x="115" y="64"
+    x="115" y="60"
     font-family="'Courier New', Courier, 'Lucida Console', monospace"
     font-size="46"
     font-weight="700"
     fill="url(#gt)"
-    letter-spacing="-1">dnsmasq</text>
+    letter-spacing="-1">d<tspan dx="4">n</tspan>s<tspan dx="2.5">m</tspan><tspan dx="2">a</tspan>sq</text>
 
   <!-- "CLUSTER MANAGER" — light weight, spaced capitals, muted -->
   <text
-    x="118" y="87"
+    x="118" y="89"
     font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
     font-size="16"
     font-weight="300"
