@@ -5,7 +5,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 <!-- Project header -->
 <p>
-  <img src="www/assets/logo.svg" alt="dcm — dnsmasq cluster manager" width="480" align="left">
+  <img src="www/assets/logo.svg" alt="dcm — dnsmasq cluster manager" width="290" align="left">
   <h3>Web frontend + CLI for a two-node dnsmasq cluster</p>
 </p>
 <p>
