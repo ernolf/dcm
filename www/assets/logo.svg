@@ -3,7 +3,7 @@
   SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
   SPDX-License-Identifier: GPL-3.0-or-later
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 110">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 110">
   <defs>
     <!-- Gradient for icon elements (diagonal, covers icon area 5..95) -->
     <linearGradient id="gi" x1="5" y1="5" x2="95" y2="95" gradientUnits="userSpaceOnUse">
