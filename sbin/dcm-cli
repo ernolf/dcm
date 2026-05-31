@@ -4,20 +4,26 @@
 
 set -euo pipefail
 
+# Read an uncommented "key = value" from a dnsmasq config file, trimmed
+conf_value() {
+    awk -v k="$1" '$0 ~ "^[[:space:]]*" k "[[:space:]]*=" {
+        sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); print; exit }' "$2"
+}
+
 # == Config ==
+# Only these two paths are dcm's own; everything else is read from dnsmasq itself.
 NODES_FILE="/etc/dcm/nodes"
 DEFAULT_FILE="/etc/default/dnsmasq"
-LOG_FILE="/var/log/dnsmasq/dnsmasq.log"
 
-# Derive paths from /etc/default/dnsmasq (single source of truth)
+# Derive all dnsmasq paths from dnsmasq's own config (single source of truth)
 # shellcheck source=/dev/null
 . "${DEFAULT_FILE}"
 _tmp="${DNSMASQ_OPTS#*--conf-file=}"
 DNSMASQ_CONF="${_tmp%%[ \"]*}"
 unset _tmp
-# Config dir: strip the trailing ,.dpkg-* exclusion suffixes from CONFIG_DIR
-DNSMASQ_D="${CONFIG_DIR%%,*}"
-HOSTS_DIR="${DNSMASQ_D}/hosts"
+DNSMASQ_D="${CONFIG_DIR%%,*}"                              # CONFIG_DIR, minus ,.dpkg-* suffixes
+HOSTS_DIR="$(conf_value addn-hosts "${DNSMASQ_CONF}")"     # addn-hosts =
+LOG_FILE="$(conf_value log-facility "${DNSMASQ_CONF}")"    # log-facility =
 
 SELF=$(hostname -s)
 
@@ -44,6 +50,14 @@ get_node_ip() {
 }
 
 validate_nodes() {
+    if [[ ! -d "${HOSTS_DIR}" ]]; then
+        cat >&2 <<EOF
+Error: 'addn-hosts' in ${DNSMASQ_CONF} resolves to '${HOSTS_DIR}', which is not a directory.
+dcm keeps its host files (local, vms, block) in a directory, not a single file.
+Point 'addn-hosts' at a directory, e.g.:  addn-hosts = ${DNSMASQ_D}/hosts
+EOF
+        return 1
+    fi
     local ok=1
     while IFS= read -r node; do
         if ! get_node_ip "${node}" > /dev/null 2>&1; then
