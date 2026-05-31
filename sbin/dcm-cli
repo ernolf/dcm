@@ -7,16 +7,17 @@ set -euo pipefail
 # == Config ==
 NODES_FILE="/etc/dcm/nodes"
 DEFAULT_FILE="/etc/default/dnsmasq"
-DNSMASQ_D="/etc/dnsmasq.d"
-HOSTS_DIR="${DNSMASQ_D}/hosts"
 LOG_FILE="/var/log/dnsmasq/dnsmasq.log"
 
-# Derive conf-file path from dnsmasq default config (single source of truth)
+# Derive paths from /etc/default/dnsmasq (single source of truth)
 # shellcheck source=/dev/null
 . "${DEFAULT_FILE}"
 _tmp="${DNSMASQ_OPTS#*--conf-file=}"
 DNSMASQ_CONF="${_tmp%%[ \"]*}"
 unset _tmp
+# Config dir: strip the trailing ,.dpkg-* exclusion suffixes from CONFIG_DIR
+DNSMASQ_D="${CONFIG_DIR%%,*}"
+HOSTS_DIR="${DNSMASQ_D}/hosts"
 
 SELF=$(hostname -s)
 
