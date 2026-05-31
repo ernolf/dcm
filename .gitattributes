@@ -1,0 +1,13 @@
+# Normalize all text files to LF in the repository
+* text=auto eol=lf
+
+# Explicit text types
+*.php   text eol=lf
+*.css   text eol=lf
+*.svg   text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+
+# Shell script without extension
+sbin/dnsmasq-cli text eol=lf

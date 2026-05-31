@@ -1,0 +1,10 @@
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local runtime state (never belongs in the repo)
+*.log

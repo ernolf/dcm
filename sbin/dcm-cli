@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+# == Config ==
+NODES_FILE="/etc/dcm/nodes"
+DEFAULT_FILE="/etc/default/dnsmasq"
+DNSMASQ_D="/etc/dnsmasq.d"
+HOSTS_DIR="${DNSMASQ_D}/hosts"
+LOG_FILE="/var/log/dnsmasq/dnsmasq.log"
+
+# Derive conf-file path from dnsmasq default config (single source of truth)
+# shellcheck source=/dev/null
+. "${DEFAULT_FILE}"
+_tmp="${DNSMASQ_OPTS#*--conf-file=}"
+DNSMASQ_CONF="${_tmp%%[ \"]*}"
+unset _tmp
+
+SELF=$(hostname -s)
+
+# ----------------------------------------
+
+read_nodes() {
+    grep -v '^\s*#' "${NODES_FILE}" | grep -v '^\s*$'
+}
+
+remote_nodes() {
+    read_nodes | grep -v "^${SELF}$"
+}
+
+get_node_ip() {
+    local node="$1"
+    local ip
+    ip=$(grep -v '^\s*#' "${HOSTS_DIR}/local" \
+        | awk -v h="${node}" '{ for(i=2;i<=NF;i++) if($i==h){ print $1; exit } }')
+    if [[ -z "${ip}" ]]; then
+        echo "Error: '${node}' not found in ${HOSTS_DIR}/local" >&2
+        return 1
+    fi
+    echo "${ip}"
+}
+
+validate_nodes() {
+    local ok=1
+    while IFS= read -r node; do
+        if ! get_node_ip "${node}" > /dev/null 2>&1; then
+            echo "Error: node '${node}' has no entry in ${HOSTS_DIR}/local" >&2
+            ok=0
+        fi
+    done < <(read_nodes)
+    [[ "${ok}" -eq 1 ]]
+}
+
+# ----------------------------------------
+
+usage() {
+    cat >&2 <<EOF
+dcm · dnsmasq cluster manager commandline interface
+
+Usage: $(basename "$0") <command>
+
+  sync                     Sync config files to all remote nodes (no restart)
+  restart local|remote|all Restart dnsmasq on node(s)
+  status  local|remote     Show dnsmasq status
+  logs    [N]              Print last N lines of log (default: 200)
+  tail-f  local|remote     Stream log in real time (tail -F)
+  stats   local|remote [all|today|1h|24h|7d]
+                           Output log analytics as key=value / TSV
+EOF
+}
+
+ensure_listen_conf() {
+    local node="$1"
+    local ip
+    ip=$(get_node_ip "${node}")
+    if [[ "${node}" == "${SELF}" ]]; then
+        printf 'listen-address = 127.0.0.1\nlisten-address = %s\n' "${ip}" \
+            > "${DNSMASQ_D}/listen.conf"
+    else
+        ssh "root@${node}" \
+            "printf 'listen-address = 127.0.0.1\nlisten-address = %s\n' '${ip}' \
+             > ${DNSMASQ_D}/listen.conf"
+    fi
+    echo "  listen.conf: 127.0.0.1 + ${ip}"
+}
+
+cmd_sync() {
+    validate_nodes
+
+    echo "--- Ensuring local listen.conf (${SELF}) ---"
+    ensure_listen_conf "${SELF}"
+
+    while IFS= read -r node; do
+        echo "--- Syncing to ${node} ---"
+
+        rsync -a "${DEFAULT_FILE}" "root@${node}:${DEFAULT_FILE}"
+        echo "  ${DEFAULT_FILE}"
+
+        rsync -a "${DNSMASQ_CONF}" "root@${node}:${DNSMASQ_CONF}"
+        echo "  ${DNSMASQ_CONF}"
+
+        rsync -a --delete --exclude='listen.conf' "${DNSMASQ_D}/" "root@${node}:${DNSMASQ_D}/"
+        echo "  ${DNSMASQ_D}/ (listen.conf excluded)"
+
+        ssh "root@${node}" "mkdir -p $(dirname "${NODES_FILE}")"
+        rsync -a "${NODES_FILE}" "root@${node}:${NODES_FILE}"
+        echo "  ${NODES_FILE}"
+
+        rsync -a /usr/local/sbin/dcm-cli "root@${node}:/usr/local/sbin/dcm-cli"
+        echo "  /usr/local/sbin/dcm-cli"
+
+        ensure_listen_conf "${node}"
+
+    done < <(remote_nodes)
+
+    echo "Sync complete."
+}
+
+cmd_restart_local() {
+    echo "Restarting dnsmasq on ${SELF} ..."
+    systemctl restart dnsmasq
+    echo "Done."
+}
+
+cmd_restart_remote() {
+    while IFS= read -r node; do
+        echo "Restarting dnsmasq on ${node} ..."
+        ssh "root@${node}" systemctl restart dnsmasq
+        echo "Done."
+    done < <(remote_nodes)
+}
+
+cmd_status_local() {
+    echo "=== ${SELF} ==="
+    systemctl status dnsmasq --no-pager || true
+}
+
+cmd_status_remote() {
+    while IFS= read -r node; do
+        echo "=== ${node} ==="
+        ssh "root@${node}" systemctl status dnsmasq --no-pager || true
+    done < <(remote_nodes)
+}
+
+cmd_logs() {
+    local n="${1:-200}"
+    tail -n "${n}" "${LOG_FILE}"
+}
+
+cmd_tail_f() {
+    local node="${1:-local}"
+    if [[ "${node}" == "remote" ]]; then
+        local rnode
+        rnode=$(remote_nodes | head -1)
+        exec ssh -o ServerAliveInterval=15 "root@${rnode}" "tail -F '${LOG_FILE}' 2>/dev/null"
+    fi
+    exec tail -F "${LOG_FILE}"
+}
+
+# Single-pass awk analytics. Output format:
+#   scalar:  key=value
+#   tabular: TYPE<TAB>key<TAB>count
+cmd_stats() {
+    local node="${1:-local}"
+    local period="${2:-all}"
+
+    if [[ "${node}" == "remote" ]]; then
+        local rnode
+        rnode=$(remote_nodes | head -1)
+        ssh "root@${rnode}" "/usr/local/sbin/dcm-cli stats local ${period}"
+        return
+    fi
+
+    # Build list of source files (include .1 for 24h/7d/all)
+    local files="${LOG_FILE}"
+    [[ -f "${LOG_FILE}.1" ]] && files="${LOG_FILE} ${LOG_FILE}.1"
+
+    # Build grep filter for time period
+    local grep_args=()
+    case "${period}" in
+        today)
+            grep_args=(-e "^$(LC_ALL=C date '+%b %e')")
+            ;;
+        1h)
+            grep_args=(-e "^$(LC_ALL=C date '+%b %e %H')")
+            # Include previous hour too (handles hour boundary)
+            grep_args+=(-e "^$(date -d '1 hour ago' '+%b %e %H')")
+            ;;
+        24h)
+            grep_args=(-e "^$(LC_ALL=C date '+%b %e')" -e "^$(LC_ALL=C date -d 'yesterday' '+%b %e')")
+            ;;
+        7d)
+            for i in 0 1 2 3 4 5 6; do
+                grep_args+=(-e "^$(LC_ALL=C date -d "${i} days ago" '+%b %e')")
+            done
+            ;;
+    esac
+
+    if [[ "${#grep_args[@]}" -gt 0 ]]; then
+        # shellcheck disable=SC2086
+        grep -h "${grep_args[@]}" ${files} 2>/dev/null
+    else
+        # shellcheck disable=SC2086
+        cat ${files} 2>/dev/null
+    fi | awk '
+{
+    event = $5
+    hour  = substr($3, 1, 2)
+    per_hour[hour]++
+
+    if (event ~ /^query\[/) {
+        total_queries++
+        qt = event; gsub(/^query\[/, "", qt); gsub(/\].*/, "", qt)
+        query_types[qt]++
+        if (NF >= 6) domains[$6]++
+        if (NF >= 8) clients[$8]++
+
+    } else if (event == "forwarded") {
+        forwarded++
+        if (NF >= 8) upstreams[$8]++
+
+    } else if (event == "cached") {
+        cached++
+        r = $NF
+        if (r == "NXDOMAIN")    cached_nxdomain++
+        else if (r ~ /NODATA/)  cached_nodata++
+
+    } else if (event == "reply") {
+        r = $NF
+        if      (r == "NXDOMAIN")     nxdomain++
+        else if (r == "NODATA-IPv6")  nodata_ipv6++
+        else if (r == "NODATA")       nodata++
+        else if (r == "SERVFAIL")     servfail++
+        else if (r == "REFUSED")      refused++
+        else if (r == "<CNAME>")      cname++
+        else                           resolved++
+
+    } else if (event == "config") {
+        r = $NF
+        if (r == "127.0.0.1" || r == "::1") blocked++
+        else if (r ~ /NODATA/)               {}
+        else                                  local_config++
+
+    } else if (event ~ /^\/etc\/dnsmasq/) {
+        r = $NF
+        if (r == "127.0.0.1" || r == "::1") blocked++
+        else                                  local_hosts++
+    }
+}
+END {
+    print "total_queries="  total_queries+0
+    print "forwarded="      forwarded+0
+    print "cached="         cached+0
+    print "cached_nxdomain=" cached_nxdomain+0
+    print "cached_nodata="  cached_nodata+0
+    print "local_config="   local_config+0
+    print "local_hosts="    local_hosts+0
+    print "blocked="        blocked+0
+    print "nxdomain="       nxdomain+0
+    print "nodata="         nodata+0
+    print "nodata_ipv6="    nodata_ipv6+0
+    print "servfail="       servfail+0
+    print "refused="        refused+0
+    print "cname="          cname+0
+    print "resolved="       resolved+0
+
+    for (qt in query_types) print "qtype\t" qt "\t" query_types[qt]+0
+    for (u  in upstreams)   print "upstream\t" u "\t" upstreams[u]+0
+    for (d  in domains)     print "domain\t"   d "\t" domains[d]+0
+    for (c  in clients)     print "client\t"   c "\t" clients[c]+0
+    for (h  in per_hour)    print "hour\t"     h "\t" per_hour[h]+0
+}
+'
+}
+
+# ----------------------------------------
+
+case "${1:-}" in
+    sync)
+        cmd_sync
+        ;;
+    restart)
+        case "${2:-}" in
+            local)   cmd_restart_local ;;
+            remote)  cmd_restart_remote ;;
+            all)     cmd_restart_local; cmd_restart_remote ;;
+            *)       echo "Error: restart requires local, remote, or all" >&2; usage; exit 1 ;;
+        esac
+        ;;
+    status)
+        case "${2:-}" in
+            local)   cmd_status_local ;;
+            remote)  cmd_status_remote ;;
+            *)       echo "Error: status requires local or remote" >&2; usage; exit 1 ;;
+        esac
+        ;;
+    logs)
+        cmd_logs "${2:-200}"
+        ;;
+    tail-f)
+        cmd_tail_f "${2:-local}"
+        ;;
+    stats)
+        cmd_stats "${2:-local}" "${3:-all}"
+        ;;
+    *)
+        usage; exit 1
+        ;;
+esac
