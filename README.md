@@ -60,9 +60,30 @@ Pick **one node to host the web UI** — the one that runs the web server and PH
 
 In the steps below `node-a` is the UI node and `node-b` a second node (placeholders for the short hostnames, `hostname -s`). Run every step as root.
 
-**Every other node needs only** `dnsmasq` installed and enabled, plus passwordless root SSH reachable from the UI node (step 6) — its config and the `dcm-cli` binary arrive on the first sync. All steps below run **on the UI node**.
+**Every other node needs only** `dnsmasq` installed and enabled, plus passwordless root SSH reachable from the UI node (step 7) — its config and the `dcm-cli` binary arrive on the first sync. All steps below run **on the UI node**.
 
-### 1. dnsmasq base config
+### 1. Free up port 53 (systemd-resolved)
+
+On systemd-based distros `systemd-resolved` occupies port 53 on `127.0.0.53`, so dnsmasq cannot bind it. Disable only the **stub listener** — `systemd-resolved` keeps running as the upstream / per-link DNS manager.
+
+`/etc/systemd/resolved.conf`:
+```ini
+[Resolve]
+DNSStubListener=no
+```
+```sh
+sudo systemctl restart systemd-resolved
+```
+
+Point the node's own resolver at dnsmasq:
+```sh
+rm -f /etc/resolv.conf
+echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+```
+
+> **Always required, regardless of upstream encryption.** A DoH/DoT/DoQ proxy (dnscrypt-proxy & co.) listens on a *different* port as dnsmasq's **upstream** and never touches port 53 — it does not replace this step. Skip this and dnsmasq cannot start, so nothing else works.
+
+### 2. dnsmasq base config
 
 dnsmasq out of the box is not enough: dcm needs query logging to a file and a hosts *directory*.
 
@@ -98,7 +119,7 @@ These are ordinary dnsmasq hosts files (loaded via `addn-hosts`), each managed b
 192.168.2.11  node-b
 ```
 
-### 2. Install dcm-cli and the node list
+### 3. Install dcm-cli and the node list
 ```sh
 install -o root -g root -m 755 sbin/dcm-cli /usr/local/sbin/dcm-cli
 mkdir -p /etc/dcm
@@ -106,14 +127,14 @@ printf '%s\n' node-a node-b > /etc/dcm/nodes    # short hostnames, one per line
 ```
 List **all** nodes (including this one) in `/etc/dcm/nodes`. The binary and this file are pushed to the other nodes on the first sync, so you install them here only.
 
-### 3. Let the web user call it
+### 4. Let the web user call it
 ```sh
 echo 'www-data ALL=(root) NOPASSWD: /usr/local/sbin/dcm-cli *' > /etc/sudoers.d/dcm-cli
 chmod 440 /etc/sudoers.d/dcm-cli
 visudo -c                                        # validate before relying on it
 ```
 
-### 4. Let PHP-FPM write to /etc
+### 5. Let PHP-FPM write to /etc
 
 PHP-FPM ships with `ProtectSystem=full`, which makes `/etc` read-only for the service and everything it spawns (including `sudo dcm-cli`). Grant write access with a **drop-in override** — never edit the packaged unit file directly:
 
@@ -155,7 +176,7 @@ sudo systemctl restart php8.x-fpm
   ```
 </details>
 
-### 5. Deploy the web frontend
+### 6. Deploy the web frontend
 ```sh
 mkdir -p /var/www/dcm
 cp -r www/* /var/www/dcm/
@@ -201,7 +222,7 @@ systemctl reload apache2
 
 > **Authentication is intentionally left out** — `inc/auth.php` is a no-op stub. Until real auth is added, keep the vhost behind HTTP Basic auth, a VPN, or a trusted network.
 
-### 6. Passwordless root SSH — from the UI node to every other node
+### 7. Passwordless root SSH — from the UI node to every other node
 
 `dcm-cli sync` runs `rsync` and `ssh` **as root**, connecting to `root@<other-node>`. So root on the UI node needs key-based access to root on every other node.
 
@@ -237,7 +258,7 @@ If it prints `OK`, you are done. Otherwise set it up:
   ```
 </details>
 
-### 7. First sync and restart
+### 8. First sync and restart
 ```sh
 sudo dcm-cli sync
 sudo dcm-cli restart all
