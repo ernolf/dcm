@@ -83,6 +83,20 @@ echo 'nameserver 127.0.0.1' > /etc/resolv.conf
 
 > **Always required, regardless of upstream encryption.** A DoH/DoT/DoQ proxy (dnscrypt-proxy & co.) listens on a *different* port as dnsmasq's upstream and never touches port 53 — it does not replace this step. Until port 53 is free, dnsmasq cannot bind it and the service fails to start (`failed to create listening socket for port 53: Address already in use`).
 
+<details>
+<summary>Why not just keep systemd-resolved and bind dnsmasq to its own addresses instead?</summary>
+
+- You could: `bind-interfaces` / `bind-dynamic` makes dnsmasq bind `127.0.0.1` and the LAN IP individually instead of the default wildcard `0.0.0.0:53`, so it no longer collides with the stub on `127.0.0.53:53`. But running both resolvers at once is messy and fragile:
+
+  - **Two sources of truth.** Anything that still reaches `127.0.0.53` — apps using the NSS `resolve` module, or a `resolv.conf` that got repointed — bypasses dnsmasq entirely. Your `hosts` / `block` / split-horizon rules and dnsmasq's query log do not apply, so dcm's live log and analytics silently miss those lookups.
+  - **resolv.conf churn.** `systemd-resolved` (together with NetworkManager / netplan) may rewrite `/etc/resolv.conf` back to `127.0.0.53` on a network change or reboot, switching the box off dnsmasq without warning.
+  - **More moving parts.** `bind-interfaces` only binds interfaces that exist at startup; addresses that appear later (DHCP, VPN tunnels) need `bind-dynamic`. The default wildcard bind avoids that — but the wildcard is exactly what collides with the stub.
+
+  Freeing port 53 once (`DNSStubListener=no`) avoids all of it, and you do not need the stub: dnsmasq *is* your resolver.
+
+  *Aside:* `listen-address` alone does **not** prevent the collision — by default it is only a software filter over the wildcard `0.0.0.0:53` socket, not an address-specific bind.
+</details>
+
 ### 2. dnsmasq base config
 
 dnsmasq out of the box is not enough: dcm needs query logging to a file and a hosts *directory*.
