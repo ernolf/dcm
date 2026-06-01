@@ -81,7 +81,7 @@ rm -f /etc/resolv.conf
 echo 'nameserver 127.0.0.1' > /etc/resolv.conf
 ```
 
-> **Always required, regardless of upstream encryption.** A DoH/DoT/DoQ proxy (dnscrypt-proxy & co.) listens on a *different* port as dnsmasq's **upstream** and never touches port 53 — it does not replace this step. Skip this and dnsmasq cannot start, so nothing else works.
+> **Always required, regardless of upstream encryption.** A DoH/DoT/DoQ proxy (dnscrypt-proxy & co.) listens on a *different* port as dnsmasq's upstream and never touches port 53 — it does not replace this step. Until port 53 is free, dnsmasq cannot bind it and the service fails to start (`failed to create listening socket for port 53: Address already in use`).
 
 ### 2. dnsmasq base config
 
