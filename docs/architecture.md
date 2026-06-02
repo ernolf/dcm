@@ -3,9 +3,9 @@ SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# dns-admin: Architecture & Setup Reference
+# dnsmasq cluster manager: Architecture & Setup Reference
 
-This document describes the complete architecture of the `dns-admin` dnsmasq cluster management system as deployed in a multi-site home network. It serves as a reference for future development sessions.
+This document describes the complete architecture of the `dcm` - dnsmasq cluster management system as deployed in a multi-site home network. It serves as a reference for future development.
 
 ---
 
