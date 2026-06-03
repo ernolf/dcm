@@ -64,22 +64,24 @@ Both servers run **identical configuration** except for `listen.conf` (server-sp
 ### `/etc/default/dnsmasq`
 ```
 ENABLED=1
-DNSMASQ_OPTS="--conf-file=/etc/dnsmasq.conf.mine"
+DNSMASQ_OPTS="--conf-file=/dev/null"
 CONFIG_DIR=/etc/dnsmasq.d,.dpkg-dist,.dpkg-old,.dpkg-new
 IGNORE_RESOLVCONF=yes
 ```
 
-### `/etc/dnsmasq.conf.mine`
-Key settings:
-- `domain-needed` / `bogus-priv` — security
-- `resolv-file = /run/systemd/resolve/resolv.conf` — upstream from systemd-resolved
-- `addn-hosts = /etc/dnsmasq.d/hosts` — loads entire hosts directory
-- `log-queries` + `log-facility` — full query logging
+### Drop-in configuration
+
+There is no monolithic config file — `--conf-file=/dev/null` makes dnsmasq read **only** the drop-ins in `/etc/dnsmasq.d/`. Each setting is its own `<directive>.conf` (present = active, absent = dnsmasq's default), written by the Configuration page. Key drop-ins:
+- `domain-needed.conf` / `bogus-priv.conf` — security
+- `resolv-file.conf` — upstream from systemd-resolved (`resolv-file = /run/systemd/resolve/resolv.conf`)
+- `addn-hosts.conf` (`addn-hosts = /etc/dnsmasq.d/hosts`) — loads the entire hosts directory
+- `log-queries.conf` + `log-facility.conf` — full query logging
 
 ### `/etc/dnsmasq.d/` structure
 
 | File | Synced | Purpose |
 |---|---|---|
+| `<directive>.conf` | Yes | one drop-in per dnsmasq option (Configuration page) |
 | `listen.conf` | **No** | `listen-address = 127.0.0.1` + own IP — generated per node |
 | `upstream.conf` | Yes | All `server =` directives |
 | `hosts/local` | Yes | LAN hosts, swarm nodes, Fritzboxen |
@@ -117,7 +119,7 @@ PHP calls it via `sudo` (sudoers: `www-data ALL=(root) NOPASSWD: /usr/local/sbin
 ### Key design decisions
 
 - **Single source of truth for listen IP**: reads node IPs from `hosts/local`, never hardcodes them
-- **Single source of truth for conf-file path**: reads `DNSMASQ_OPTS` from `/etc/default/dnsmasq`
+- **Single source of truth for paths**: reads `CONFIG_DIR` from `/etc/default/dnsmasq`, then `addn-hosts` / `log-facility` from the merged drop-ins
 - **Single source of truth for swarm members**: `/etc/dcm/nodes` (hostname list only)
 - **`listen.conf` is never synced**: regenerated from `hosts/local` after every sync
 - **`LC_ALL=C` for all `date` calls**: dnsmasq logs in English (`May 31`), system locale is German (`Mai 31`)
@@ -147,7 +149,6 @@ sequenceDiagram
     PHP->>CLI: sudo dcm-cli sync
     CLI->>L: write listen.conf (127.0.0.1 + 192.168.189.1)
     CLI->>R: rsync /etc/default/dnsmasq
-    CLI->>R: rsync /etc/dnsmasq.conf.mine
     CLI->>R: rsync /etc/dnsmasq.d/ (--exclude listen.conf)
     CLI->>R: rsync /etc/dcm/nodes
     CLI->>R: rsync /usr/local/sbin/dcm-cli
@@ -167,12 +168,12 @@ Also: `https://adblock.global-social.net/` (ad-server sink — served by same Ap
 
 | Page | File | Description |
 |---|---|---|
-| Dashboard | `dashboard.php` | Server status, Sync/Restart controls with live output |
+| Dashboard | `dashboard.php` | Server status (incl. listen addresses + port), Sync/Restart controls with live output |
 | Hosts | `hosts.php` | Edit `hosts/local` — add/remove/enable/disable entries |
 | Virtual Machines | `vms.php` | Edit `hosts/vms` + one-click subnet relocation |
 | Block List | `block.php` | View `hosts/block` grouped by redirect IP |
-| Upstream DNS | `upstream.php` | Edit `upstream.conf` |
-| Configuration | `dnsconf.php` | Edit `dnsmasq.conf.mine` |
+| Upstream DNS | `upstream.php` | Per-directive editor for the upstream group (no-resolv, resolv-file, server, …); servers go to `upstream.conf` |
+| Configuration | `dnsconf.php` | Per-directive drop-in editor — schema-driven switches/selects with dnsmasq manual help |
 | Live Log | `live.php` | Real-time SSE log viewer, two panels (local + remote), color-coded, layout toggle, dark mode |
 | Analytics | `analytics.php` | Full log analysis — time range + server filter, persisted via cookie |
 
@@ -184,16 +185,16 @@ graph LR
     Apache -->|FastCGI| PHPFPM["PHP-FPM (www-data)\nProtectSystem=full +\nReadWritePaths override"]
     PHPFPM -->|"sudo (NOPASSWD)"| CLI["/usr/local/sbin/dcm-cli (root)"]
     CLI -->|"rsync + SSH"| Remote["optiplex-380-0 (root)"]
-    CLI -->|"direct write"| EtcDnsmasq["/etc/dnsmasq.d/\n/etc/dcm/\n/etc/dnsmasq.conf.mine\n/etc/default/dnsmasq"]
-    PHPFPM -->|"direct write (www-data owns)"| HostsFiles["/etc/dnsmasq.d/hosts/local\n/etc/dnsmasq.d/hosts/vms\n/etc/dnsmasq.d/upstream.conf"]
+    CLI -->|"direct write"| EtcDnsmasq["/etc/dnsmasq.d/listen.conf\n/etc/dcm/nodes"]
+    PHPFPM -->|"direct write (www-data owns)"| HostsFiles["/etc/dnsmasq.d/*.conf\n/etc/dnsmasq.d/hosts/local\n/etc/dnsmasq.d/hosts/vms"]
 ```
 
 PHP-FPM runs with `ProtectSystem=full` (systemd sandboxing makes `/etc` read-only). Override in `/etc/systemd/system/php8.4-fpm.service.d/override.conf`:
 ```ini
 [Service]
-ReadWritePaths=/etc/dnsmasq.d /etc/dcm /etc/dnsmasq.conf.mine /etc/default/dnsmasq
+ReadWritePaths=/etc/dnsmasq.d /etc/dcm
 ```
-This applies to all child processes including `sudo dcm-cli`.
+This applies to all child processes including `sudo dcm-cli`. The Configuration page additionally needs `/etc/dnsmasq.d` group-writable by `www-data` (`chown root:www-data` + `chmod 2775`) so it can create and remove `<directive>.conf` drop-ins.
 
 ---
 
@@ -267,5 +268,3 @@ VMs in `hosts/vms` keep a fixed last octet across all networks. When the laptop 
 - **Auth**: `inc/auth.php` is a stub — always passes. Add HTTP Basic Auth or session login when external access is needed.
 - **Compressed logs**: `.log.2.gz` and older not yet analyzed — add `zcat` support for longer time ranges.
 - **Block list**: read-only in UI. Editing requires `hosts/block` to be owned by `www-data`.
-- **dnsconf.php**: raw textarea — structured per-option form not yet built.
-- **upstream.conf**: raw textarea — grouped table editor (one row per domain/upstream pair) not yet built.

@@ -20,13 +20,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
 manages a two-node dnsmasq cluster from a single place:
 - add, toggle and delete hosts
 - relocate VM records between subnets
+- edit dnsmasq options through a per-directive Configuration page
 - sync the configuration to all nodes
 - restart the service
 - watch both servers' query logs live with per-server analytics.
 
 The web frontend drives a single privileged CLI backend (`dcm-cli`) over `sudo`.
 
-> **Early development.** dcm is under active, heavy development and far from feature-complete. Several planned features — DHCP and PXE/TFTP boot, ad-blocking lists, multi-network / split-horizon DNS, a per-setting configuration editor and real authentication — are **not implemented yet**, and existing behaviour may still change.
+> **Early development.** dcm is under active, heavy development and far from feature-complete. Several planned features — DHCP and PXE/TFTP boot, ad-blocking lists, multi-network / split-horizon DNS, and real authentication — are **not implemented yet**, and existing behaviour may still change.
 
 ---
 
@@ -34,14 +35,15 @@ The web frontend drives a single privileged CLI backend (`dcm-cli`) over `sudo`.
 
 Two (or more) dnsmasq nodes run an **identical configuration** except for `listen.conf` — each node listens on its own address. `dcm-cli` keeps the nodes in sync over `rsync` + SSH and is the single privileged entry point; the PHP frontend only ever calls `dcm-cli` through `sudo`.
 
-dcm does not duplicate dnsmasq's settings — it **reads every path from dnsmasq's own config** (single source of truth):
+dnsmasq is configured entirely through **drop-in files** in its config directory (`/etc/dnsmasq.d/`); there is no monolithic config file. Each setting on the Configuration page is one `<directive>.conf` drop-in — present means the option is active, absent means dnsmasq's built-in default.
+
+dcm does not duplicate dnsmasq's settings — it **reads every path from dnsmasq's own config** (single source of truth), merging the drop-ins the same way dnsmasq does:
 
 | dcm needs | read from |
 |---|---|
-| conf-file | `DNSMASQ_OPTS --conf-file=` in `/etc/default/dnsmasq` |
 | config dir | `CONFIG_DIR` in `/etc/default/dnsmasq` |
-| hosts dir | `addn-hosts` in the conf-file |
-| log file | `log-facility` in the conf-file |
+| hosts dir | `addn-hosts` in the drop-ins |
+| log file | `log-facility` in the drop-ins |
 
 The only dcm-owned paths are the binary (`/usr/local/sbin/dcm-cli`) and the node list (`/etc/dcm/nodes`).
 
@@ -52,15 +54,17 @@ See [`docs/architecture.md`](docs/architecture.md) for diagrams and the full des
 - Two or more Debian/Ubuntu nodes running `dnsmasq`.
 - On the node that serves the UI: a web server (Apache2 in the example below) and PHP-FPM (8.x).
 - `rsync` and passwordless **root** SSH from the UI node to every other node.
-- dnsmasq configured with `log-queries`, a file-based `log-facility`, and `addn-hosts` pointing at a **directory**.
+- `addn-hosts` set to a **directory** (not a single file) — dcm keeps its host files there. The setup below creates this drop-in; query logging is switched on later in the UI.
 
 ## Setup
 
-Pick **one node to host the web UI** — the one that runs the web server and PHP-FPM. You perform the **entire setup on that node**; the first `sudo dcm-cli sync` then replicates the dnsmasq config, the node list and the `dcm-cli` binary to every other node.
+Pick **one node to host the web UI** — the one that runs the web server and PHP-FPM. With a single exception you do the **entire setup on that node**; the first `sudo dcm-cli sync` then replicates everything — the `/etc/default/dnsmasq` launch config, the drop-ins, the host files, the node list and the `dcm-cli` binary — to every other node.
+
+The exception is **step 1** (freeing port 53): it changes each node's own OS (`systemd-resolved` and `/etc/resolv.conf`), is not synced, and must be done **on every node**.
 
 In the steps below `node-a` is the UI node and `node-b` a second node (placeholders for the short hostnames, `hostname -s`). Run every step as root.
 
-**Every other node needs only** `dnsmasq` installed and enabled, plus passwordless root SSH reachable from the UI node (step 7) — its config and the `dcm-cli` binary arrive on the first sync. All steps below run **on the UI node**.
+**Every other node needs only:** `dnsmasq` installed and enabled, step 1 done locally, and passwordless root SSH reachable from the UI node (step 7). Its `/etc/default/dnsmasq`, drop-ins and the `dcm-cli` binary all arrive on the first sync. All remaining steps run **on the UI node**.
 
 ### 1. Free up port 53 (systemd-resolved)
 
@@ -99,22 +103,24 @@ echo 'nameserver 127.0.0.1' > /etc/resolv.conf
 
 ### 2. dnsmasq base config
 
-dnsmasq out of the box is not enough: dcm needs query logging to a file and a hosts *directory*.
+dnsmasq is configured entirely through drop-ins in `/etc/dnsmasq.d/`; there is no monolithic config file. Point dnsmasq at an empty config file so it reads **only** the drop-in directory.
 
 `/etc/default/dnsmasq`:
 ```sh
 ENABLED=1
-DNSMASQ_OPTS="--conf-file=/etc/dnsmasq.conf.mine"
+DNSMASQ_OPTS="--conf-file=/dev/null"
 CONFIG_DIR=/etc/dnsmasq.d,.dpkg-dist,.dpkg-old,.dpkg-new
 IGNORE_RESOLVCONF=yes
 ```
 
-The conf-file it points to (here `/etc/dnsmasq.conf.mine`) must contain at least:
+`--conf-file=/dev/null` overrides the compiled-in default (`/etc/dnsmasq.conf`) with an empty file, so dnsmasq's entire configuration comes from `CONFIG_DIR` (passed to dnsmasq as `--conf-dir`). dcm needs a hosts *directory* and a log *file*; create those as drop-ins:
 ```sh
-log-queries
-log-facility = /var/log/dnsmasq/dnsmasq.log
-addn-hosts   = /etc/dnsmasq.d/hosts
+mkdir -p /etc/dnsmasq.d
+printf 'addn-hosts = /etc/dnsmasq.d/hosts\n'           > /etc/dnsmasq.d/addn-hosts.conf
+printf 'log-facility = /var/log/dnsmasq/dnsmasq.log\n' > /etc/dnsmasq.d/log-facility.conf
 ```
+
+> Only the log **file** is defined here. **Query logging itself is switched on later on the Configuration page** — that also drives the Live Log and Analytics pages, which stay hidden until logging is on. Defining the file but enabling logging in the UI keeps a fresh install fail-safe.
 
 Create the hosts directory and its three files:
 ```sh
@@ -159,7 +165,7 @@ sudo systemctl edit php8.x-fpm
 Add only the section and line you need:
 ```ini
 [Service]
-ReadWritePaths=/etc/dnsmasq.d /etc/dcm /etc/dnsmasq.conf.mine /etc/default/dnsmasq
+ReadWritePaths=/etc/dnsmasq.d /etc/dcm
 ```
 
 systemd saves this to `/etc/systemd/system/php8.x-fpm.service.d/override.conf` (which survives package updates), then reload and restart:
@@ -197,19 +203,23 @@ cp -r www/* /var/www/dcm/
 chown -R www-data:www-data /var/www/dcm
 ```
 
-The UI writes some dnsmasq files directly (as `www-data`); give it ownership of those, keep the rest root-owned:
+The UI writes dnsmasq files directly (as `www-data`): the hosts and upstream files, and — on the Configuration page — one `<directive>.conf` drop-in per setting in `/etc/dnsmasq.d/`. Creating and removing those drop-ins needs write access to the **directory** itself, so make it group-writable by `www-data` (setgid, so new drop-ins inherit the group); give `www-data` the files it edits and keep the rest root-owned:
 ```sh
-# edited in the UI -> owned by www-data
-chown www-data:www-data /etc/dnsmasq.d/hosts/local /etc/dnsmasq.d/hosts/vms /etc/dnsmasq.d/upstream.conf
-# conf-file edited via the Configuration page -> group-writable
-chown root:www-data /etc/dnsmasq.conf.mine && chmod 664 /etc/dnsmasq.conf.mine
-# hosts/block stays root-owned (read-only in the UI by design)
+# the Configuration page creates/removes <directive>.conf drop-ins here
+chown root:www-data /etc/dnsmasq.d && chmod 2775 /etc/dnsmasq.d
+# UI-edited drop-ins (per-directive config + upstream.conf) -> owned by www-data
+chown www-data:www-data /etc/dnsmasq.d/*.conf
+chown www-data:www-data /etc/dnsmasq.d/hosts/local /etc/dnsmasq.d/hosts/vms
+# generated per node / read-only in the UI by design -> stay root-owned
+chown root:root /etc/dnsmasq.d/listen.conf /etc/dnsmasq.d/hosts/block
 ```
+(`www-data` already runs `dcm-cli` as root via `sudo`, so making the drop-in directory group-writable is not an additional exposure.)
 
 Apache vhost (`/etc/apache2/sites-available/dcm.conf`) — adjust the domain and TLS to your environment:
 ```apache
 <VirtualHost *:443>
     ServerName   dns.example.net
+    ServerAlias  dcm.example.net
     DocumentRoot /var/www/dcm
     DirectoryIndex index.php
 
@@ -233,6 +243,8 @@ systemctl reload apache2
 ```
 
 > **Use a wildcard TLS certificate.** The UI node must **never** be exposed to the internet, so it cannot answer an ACME HTTP-01 challenge. Obtain a wildcard certificate via a DNS-01 challenge (or copy one from a host that already manages it) and point `SSLCertificateFile` / `SSLCertificateKeyFile` at it.
+
+> **Make the UI reachable by name.** Once dcm is the resolver, the vhost's `ServerName` / `ServerAlias` resolve only if dnsmasq knows them. Add an entry mapping each UI hostname to the UI node's IP on the **Hosts** page (or in `hosts/local`).
 
 > **Authentication is intentionally left out** — `inc/auth.php` is a no-op stub. Until real auth is added, keep the vhost behind HTTP Basic auth, a VPN, or a trusted network.
 
@@ -288,6 +300,8 @@ sudo dcm-cli restart all
 | `/etc/dcm/nodes` | root | node short-hostnames, one per line |
 | `/etc/sudoers.d/dcm-cli` | root `440` | lets `www-data` run `dcm-cli` as root |
 | `/var/www/dcm` | www-data | web frontend |
+| `/etc/dnsmasq.d` | `root:www-data` `2775` | drop-in dir; UI creates/removes `<directive>.conf` here |
+| `/etc/dnsmasq.d/*.conf` | www-data | per-directive drop-ins + `upstream.conf`, edited in the UI |
 | `/etc/dnsmasq.d/hosts/{local,vms}` | www-data | host records, edited in the UI |
 | `/etc/dnsmasq.d/hosts/block` | root | phone-home endpoints → `127.0.0.1`, read-only in the UI |
 | `/etc/dnsmasq.d/listen.conf` | root | per-node, generated, never synced |

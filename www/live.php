@@ -20,9 +20,11 @@ page_start('Live Log', __FILE__);
 ?>
 <style>
 .live-toolbar { display:flex; align-items:center; gap:.5rem; margin-bottom:.75rem; flex-wrap:wrap; }
+.live-wrap.side  { max-width: calc(var(--content-width) * 2); margin-inline: auto; }
+.live-wrap.stack { max-width: var(--content-width);           margin-inline: auto; }
 .live-container { display:grid; gap:.75rem; height:calc(100vh - 156px); min-height:300px; }
-.live-container.side  { grid-template-columns:1fr 1fr; grid-template-rows:1fr; }
-.live-container.stack { grid-template-columns:1fr; grid-template-rows:1fr 1fr; }
+.live-wrap.side  .live-container { grid-template-columns:1fr 1fr; grid-template-rows:1fr; }
+.live-wrap.stack .live-container { grid-template-columns:1fr; grid-template-rows:1fr 1fr; }
 .live-panel { display:flex; flex-direction:column; border-radius:.5rem; overflow:hidden; border:1px solid #334155; min-height:0; }
 .live-panel-header { padding:.45rem .9rem; background:#1e293b; color:#e2e8f0; font-size:.8rem; display:flex; align-items:center; gap:.5rem; flex-shrink:0; border-bottom:1px solid #334155; }
 .live-panel-header .panel-title { font-weight:600; }
@@ -30,6 +32,7 @@ page_start('Live Log', __FILE__);
 .live-log { flex:1; overflow-y:auto; background:#0f172a; color:#e2e8f0; padding:.6rem .75rem; margin:0; font-family:monospace; font-size:.75rem; line-height:1.55; min-height:0; white-space:pre-wrap; word-break:break-all; }
 </style>
 
+<div class="live-wrap side" id="live-wrap">
 <div class="live-toolbar">
   <span style="font-size:.8rem;color:var(--text-muted)">Layout:</span>
   <button class="btn btn-primary   btn-sm" id="btn-side"  onclick="setLayout('side')" >⬜⬜ Side by side</button>
@@ -39,7 +42,7 @@ page_start('Live Log', __FILE__);
   </div>
 </div>
 
-<div class="live-container side" id="live-container">
+<div class="live-container" id="live-container">
 <?php foreach (['local' => $self, 'remote' => $remote ?: 'remote'] as $key => $label): ?>
   <div class="live-panel" id="panel-<?= $key ?>">
     <div class="live-panel-header">
@@ -54,6 +57,7 @@ page_start('Live Log', __FILE__);
     <pre class="live-log" id="log-<?= $key ?>"></pre>
   </div>
 <?php endforeach; ?>
+</div>
 </div>
 
 <script>
@@ -117,7 +121,7 @@ function togglePause(srv) {
 }
 
 function setLayout(mode) {
-    document.getElementById('live-container').className = 'live-container ' + mode;
+    document.getElementById('live-wrap').className = 'live-wrap ' + mode;
     document.getElementById('btn-side' ).className  = 'btn btn-sm ' + (mode === 'side'  ? 'btn-primary' : 'btn-secondary');
     document.getElementById('btn-stack').className  = 'btn btn-sm ' + (mode === 'stack' ? 'btn-primary' : 'btn-secondary');
 }

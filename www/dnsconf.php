@@ -5,44 +5,42 @@
 require_once 'inc/config.php';
 require_once 'inc/auth.php';
 require_once 'inc/layout.php';
-require_once 'inc/cli.php';
+require_once 'inc/dnsmasq_directives.php';
+require_once 'inc/dnsmasq_manpage.php';
+require_once 'inc/dropins.php';
+require_once 'inc/dropin_form.php';
 
 require_auth();
 
-$msg = null;
+$dirs = dnsmasq_directives();
+$man  = dnsmasq_manpage();
+// The Configuration page owns the phase-1 groups; upstream lives on its own page.
+$groups = array_filter(dnsmasq_groups(), fn($g) => ($g['phase'] ?? 1) === 1);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $content = $_POST['content'] ?? '';
-    $content = str_replace("\r\n", "\n", $content);
-    if (!str_ends_with($content, "\n")) $content .= "\n";
-    if (file_put_contents(DNSMASQ_CONF, $content) !== false) {
-        $msg = ['ok', 'dnsmasq.conf.mine saved. Restart dnsmasq to apply.'];
-    } else {
-        $msg = ['err', 'Write failed — check file permissions.'];
-    }
-}
+$save    = dropin_form_save($dirs, 1, 'dnsconf.php');
+$desired = $save['desired'];
+$msg     = $save['msg'];
+if (isset($_GET['saved'])) $msg = ['ok', saved_hint()];
 
-$raw = is_readable(DNSMASQ_CONF) ? file_get_contents(DNSMASQ_CONF) : '# File not found: ' . DNSMASQ_CONF;
+$merged  = dropins_merge(DNSMASQ_D);
+$postErr = $msg && $msg[0] === 'err';
 
-page_start('Configuration', __FILE__);
+page_start('Configuration', __FILE__, 'narrow');
 if ($msg) alert($msg[0], $msg[1]);
 ?>
-<div class="card">
-  <div class="card-header">
-    dnsmasq configuration
-    <span class="text-muted" style="font-weight:400;margin-left:auto;font-size:.75rem"><?= DNSMASQ_CONF ?></span>
-  </div>
-  <div class="card-body">
-    <p class="text-muted mb-2" style="font-size:.825rem">
-      Direct edit of the main config file.
-      After saving, use <a href="dashboard.php">Dashboard → Restart</a> to apply changes.
-    </p>
-    <form method="post">
-      <textarea name="content" rows="30"><?= h($raw) ?></textarea>
-      <div style="margin-top:.75rem">
-        <button class="btn btn-primary">Save</button>
-      </div>
-    </form>
-  </div>
+<form method="post">
+<input type="hidden" name="dropin_form" value="1">
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+  <button class="btn btn-primary js-save">Save changes</button>
+  <span class="text-muted" style="font-size:.8rem">
+    Each editable setting writes one <code>&lt;key&gt;.conf</code> drop-in in <code><?= h(DNSMASQ_D) ?></code>;
+    Default removes it. Managed/locked rows are read-only.
+  </span>
 </div>
+<?php dropin_form_render($dirs, $groups, $man, $merged, $desired, $postErr, 1); ?>
+<div style="margin-bottom:2rem">
+  <button class="btn btn-primary js-save">Save changes</button>
+</div>
+</form>
+<?php dropin_form_scripts(); ?>
 <?php page_end(); ?>

@@ -18,7 +18,7 @@ foreach ($entries as $e) {
     $by_ip[$e['ip']][] = $e;
 }
 
-page_start('Block List', __FILE__);
+page_start('Block List', __FILE__, 'narrow');
 ?>
 <div class="card">
   <div class="card-header">

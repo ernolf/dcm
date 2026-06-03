@@ -15,15 +15,37 @@ conf_value() {
 NODES_FILE="/etc/dcm/nodes"
 DEFAULT_FILE="/etc/default/dnsmasq"
 
-# Derive all dnsmasq paths from dnsmasq's own config (single source of truth)
+# Derive all dnsmasq paths from dnsmasq's own config (single source of truth).
+# dnsmasq merges the conf-file with every snippet in the conf-dir, so dcm reads
+# the same set: the conf-file (if still a real file) plus all *.conf snippets,
+# with snippets taking precedence (/dev/null is not -f, so it drops out).
 # shellcheck source=/dev/null
 . "${DEFAULT_FILE}"
 _tmp="${DNSMASQ_OPTS#*--conf-file=}"
 DNSMASQ_CONF="${_tmp%%[ \"]*}"
 unset _tmp
 DNSMASQ_D="${CONFIG_DIR%%,*}"                              # CONFIG_DIR, minus ,.dpkg-* suffixes
-HOSTS_DIR="$(conf_value addn-hosts "${DNSMASQ_CONF}")"     # addn-hosts =
-LOG_FILE="$(conf_value log-facility "${DNSMASQ_CONF}")"    # log-facility =
+
+# Last uncommented "key = value" across all given files wins.
+conf_value_multi() {
+    local key="$1"; shift
+    local f v out=""
+    for f in "$@"; do
+        [[ -f "${f}" ]] || continue
+        v="$(conf_value "${key}" "${f}")"
+        [[ -n "${v}" ]] && out="${v}"
+    done
+    printf '%s\n' "${out}"
+}
+
+_sources=()
+[[ -f "${DNSMASQ_CONF}" ]] && _sources+=("${DNSMASQ_CONF}")
+for _f in "${DNSMASQ_D}"/*.conf; do [[ -f "${_f}" ]] && _sources+=("${_f}"); done
+HOSTS_DIR="$(conf_value_multi addn-hosts   "${_sources[@]}")"   # addn-hosts =
+LOG_FILE="$(conf_value_multi log-facility "${_sources[@]}")"    # log-facility =
+HOSTS_DIR="${HOSTS_DIR:-${DNSMASQ_D}/hosts}"
+LOG_FILE="${LOG_FILE:-/var/log/dnsmasq/dnsmasq.log}"
+unset _f _sources
 
 SELF=$(hostname -s)
 
@@ -52,9 +74,9 @@ get_node_ip() {
 validate_nodes() {
     if [[ ! -d "${HOSTS_DIR}" ]]; then
         cat >&2 <<EOF
-Error: 'addn-hosts' in ${DNSMASQ_CONF} resolves to '${HOSTS_DIR}', which is not a directory.
+Error: 'addn-hosts' resolves to '${HOSTS_DIR}', which is not a directory.
 dcm keeps its host files (local, vms, block) in a directory, not a single file.
-Point 'addn-hosts' at a directory, e.g.:  addn-hosts = ${DNSMASQ_D}/hosts
+Point 'addn-hosts' at a directory in a snippet under ${DNSMASQ_D}, e.g.:  addn-hosts = ${DNSMASQ_D}/hosts
 EOF
         return 1
     fi
@@ -112,9 +134,6 @@ cmd_sync() {
 
         rsync -a "${DEFAULT_FILE}" "root@${node}:${DEFAULT_FILE}"
         echo "  ${DEFAULT_FILE}"
-
-        rsync -a "${DNSMASQ_CONF}" "root@${node}:${DNSMASQ_CONF}"
-        echo "  ${DNSMASQ_CONF}"
 
         rsync -a --delete --exclude='listen.conf' "${DNSMASQ_D}/" "root@${node}:${DNSMASQ_D}/"
         echo "  ${DNSMASQ_D}/ (listen.conf excluded)"

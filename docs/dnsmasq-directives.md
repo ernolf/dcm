@@ -56,7 +56,7 @@ For a plain default-off flag, states 1 and 3 collapse: "off" simply means the di
 | Directive | Type | Default | Enable | Disable | Conflicts / Requires | dcm |
 |---|---|---|---|---|---|---|
 | `log-queries` | flag | off (no query log) | `log-queries` | removed | — | **Toggle.** OFF greys out `log-facility` and removes **live.php / analytics.php** from the nav |
-| `log-facility` | path | syslog (DAEMON) | `log-facility=<path>` | removed → syslog | — | **SSOT path** from `/etc/dcm/config`; otherwise locked |
+| `log-facility` | path | syslog (DAEMON) | `log-facility=<path>` | removed → syslog | — | **managed drop-in** (`log-facility.conf`); otherwise locked |
 | `log-async` | int/flag | off (synchronous) | `log-async[=N]` (default 5, max 100) | removed | — | optional |
 
 ## B — Name / domain handling
@@ -103,12 +103,12 @@ For a plain default-off flag, states 1 and 3 collapse: "off" simply means the di
 
 ## F — Upstream / forwarding (Phase 2 — Upstream page)
 
-These belong on the Upstream page, not the Configuration page. Listed here for completeness because they are also snap-ins.
+These belong on the Upstream page, not the Configuration page. Listed here for completeness because they are also drop-ins.
 
 | Directive | Type | Default | Enable | Disable | Conflicts / Requires | dcm |
 |---|---|---|---|---|---|---|
 | `no-resolv` | flag | **resolv-file is read (on)** | `no-resolv` | removed | pairs with `server=` | core of the systemd-resolved decoupling; true three-state |
-| `resolv-file` | path | `/etc/resolv.conf` | `resolv-file=<path>` | via `no-resolv` | ignored when `no-resolv` | legacy snap-in |
+| `resolv-file` | path | `/etc/resolv.conf` | `resolv-file=<path>` | via `no-resolv` | ignored when `no-resolv` | legacy drop-in |
 | `no-poll` | flag | **polls resolv-file (on)** | `no-poll` | removed | — | — |
 | `server` | list | from resolv-file | `server=<spec>` | removed | — | `upstream.conf` |
 | `strict-order` | flag | off | `strict-order` | removed | **⇔ `all-servers`** | mutually exclusive |
@@ -121,7 +121,7 @@ These belong on the Upstream page, not the Configuration page. Listed here for c
 
 | Directive | Reason |
 |---|---|
-| `addn-hosts` | dcm-managed snap-in (`addn-hosts.conf`), value from `/etc/dcm/config` |
+| `addn-hosts` | dcm-managed drop-in (`addn-hosts.conf`) |
 | `conf-dir` / `conf-file` | driven by `/etc/default/dnsmasq` (`--conf-file=/dev/null`, `CONFIG_DIR`), never edited in the UI |
 | `interface` / `listen-address` / `bind-interfaces` / `bind-dynamic` | **`listen.conf`, generated per node** — editing here would collide; shown locked with a note |
 | `port` | default 53; changing it breaks dcm's assumptions and the bind logic — at most shown read-only |

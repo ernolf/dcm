@@ -10,4 +10,4 @@
 *.yml   text eol=lf
 
 # Shell script without extension
-sbin/dnsmasq-cli text eol=lf
+sbin/dcm-cli text eol=lf

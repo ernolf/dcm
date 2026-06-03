@@ -221,7 +221,7 @@ function render_stats(array $s, string $label): void {
     <?php
 }
 
-page_start('Analytics', __FILE__);
+page_start('Analytics', __FILE__, $servers === 'both' ? 'wide' : 'narrow');
 ?>
 <!-- Filters -->
 <div class="card mb-2">

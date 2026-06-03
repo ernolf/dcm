@@ -6,6 +6,7 @@ require_once 'inc/config.php';
 require_once 'inc/auth.php';
 require_once 'inc/layout.php';
 require_once 'inc/cli.php';
+require_once 'inc/hosts_file.php';
 
 require_auth();
 
@@ -15,7 +16,18 @@ $nodes = array_values(array_filter(
 ));
 $self = trim((string)shell_exec('hostname -s'));
 
-page_start('Dashboard', __FILE__);
+// Listen address + port per node — shown as status. listen.conf is generated
+// from each node's hosts/local IP (127.0.0.1 + that IP); port defaults to 53.
+$node_ip = [];
+foreach ((new HostsFile(HOSTS_DIR . '/local'))->entries() as $e) {
+    if (!$e['enabled']) continue;
+    foreach ($e['hostnames'] as $hn) {
+        if (!isset($node_ip[$hn])) $node_ip[$hn] = $e['ip'];
+    }
+}
+$port = dropins_merge(DNSMASQ_D)['port'][0] ?? '53';
+
+page_start('Dashboard', __FILE__, 'narrow');
 ?>
 <div class="grid-2">
 <?php foreach ($nodes as $node):
@@ -29,6 +41,11 @@ page_start('Dashboard', __FILE__);
     </div>
     <div class="card-body">
       <p id="status-<?= h($node) ?>" class="text-muted" style="font-size:.825rem">Loading…</p>
+      <?php if (!empty($node_ip[$node])): ?>
+      <p class="text-muted" style="font-size:.8rem;margin-top:.4rem">
+        Listening on <code>127.0.0.1</code> and <code><?= h($node_ip[$node]) ?></code> on port <?= h((string) $port) ?>
+      </p>
+      <?php endif; ?>
     </div>
   </div>
 <?php endforeach; ?>

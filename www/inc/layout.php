@@ -2,21 +2,45 @@
 // SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/dropins.php';
+require_once __DIR__ . '/dnsmasq_directives.php';
+
+// Pages whose driving directive is currently off (schema 'cascade_off') are
+// hidden from the nav. Today: query logging off -> Live Log and Analytics, which
+// have no log to read, disappear.
+function nav_hidden_pages(): array {
+    if (!defined('DNSMASQ_D')) return [];
+    $merged = dropins_merge(DNSMASQ_D);
+    $hidden = [];
+    foreach (dnsmasq_directives() as $key => $entry) {
+        if (empty($entry['cascade_off'])) continue;
+        if (dropin_state($key, $entry, $merged)['state'] === 'default') {
+            array_push($hidden, ...$entry['cascade_off']);
+        }
+    }
+    return $hidden;
+}
+
 function render_nav(): array {
     return [
         ['file' => 'dashboard.php',  'label' => 'Dashboard',         'icon' => '◈'],
+        ['file' => 'dnsconf.php',    'label' => 'Configuration',      'icon' => '⚙'],
         ['file' => 'hosts.php',      'label' => 'Hosts',              'icon' => '⊞'],
         ['file' => 'vms.php',        'label' => 'Virtual Machines',   'icon' => '⬡'],
         ['file' => 'block.php',      'label' => 'Block List',         'icon' => '⊘'],
         ['file' => 'upstream.php',   'label' => 'Upstream DNS',       'icon' => '↑'],
-        ['file' => 'dnsconf.php',    'label' => 'Configuration',      'icon' => '⚙'],
         ['file' => 'live.php',       'label' => 'Live Log',           'icon' => '▶'],
         ['file' => 'analytics.php',  'label' => 'Analytics',          'icon' => '≡'],
     ];
 }
 
-function page_start(string $title, string $current): void {
-    $nav  = render_nav();
+function page_start(string $title, string $current, string $width = ''): void {
+    $nav    = render_nav();
+    $hidden = nav_hidden_pages();
+    if ($hidden) {
+        $nav = array_values(array_filter($nav, fn($i) => !in_array($i['file'], $hidden, true)));
+    }
     $self = basename($current);
     ?>
 <!DOCTYPE html>
@@ -72,7 +96,7 @@ function page_start(string $title, string $current): void {
 
 <!-- Page content -->
 <div class="page-body">
-  <div class="content">
+  <div class="content<?= $width !== '' ? ' ' . $width : '' ?>">
 
 <script>
 function openNav() {
@@ -119,4 +143,10 @@ function h(string $s): string {
 function alert(string $type, string $msg): void {
     $cls = $type === 'ok' ? 'alert-ok' : 'alert-err';
     echo '<div class="alert ' . $cls . '">' . h($msg) . '</div>';
+}
+
+// Standard "saved" notice — every editable page shows the same follow-up so the
+// user knows a change still has to be synced to the other nodes and applied.
+function saved_hint(): string {
+    return 'Saved. Run Sync on the Dashboard to push it to the other nodes, then Restart dnsmasq to apply.';
 }

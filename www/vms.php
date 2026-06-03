@@ -63,15 +63,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$msg || $msg[0] === 'ok') {
-        header('Location: vms.php');
+        header('Location: vms.php' . ($msg ? '?saved=1' : ''));
         exit;
     }
 }
 
+if (isset($_GET['saved'])) $msg = ['ok', saved_hint()];
+
 $entries       = $file->entries();
 $current_prefix = detect_prefix($entries);
 
-page_start('Virtual Machines', __FILE__);
+page_start('Virtual Machines', __FILE__, 'narrow');
 if ($msg) alert($msg[0], $msg[1]);
 ?>
 <div class="card mb-2">
