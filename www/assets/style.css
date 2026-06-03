@@ -170,6 +170,24 @@ body.nav-open .waffle-open { display: flex; }
 .nav-link.active { background: rgba(59,130,246,.15); color: #fff; border-left-color: var(--blue); }
 .nav-icon { width: 16px; text-align: center; font-style: normal; flex-shrink: 0; }
 
+/* Repo link pinned to the bottom edge of the sidebar (margin-top:auto). */
+.nav-repo {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .7rem 1rem;
+    border-top: 1px solid var(--nav-hover);
+    color: var(--nav-text);
+    text-decoration: none;
+    font-size: .7rem;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.nav-repo:hover { color: #fff; }
+.nav-repo-icon { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-repo-url  { overflow: hidden; text-overflow: ellipsis; }
+
 /* ── Page body ───────────────────────────────────────── */
 .page-body { padding-top: 52px; min-height: 100vh; }
 .content        { padding: 1.5rem; }
