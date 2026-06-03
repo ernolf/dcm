@@ -31,6 +31,22 @@ switch ($action) {
         echo json_encode(cli_run('status', $target));
         break;
 
+    case 'diff':
+        echo json_encode(cli_run('diff'));
+        break;
+
+    case 'health':
+        // dcm-cli health prints key=value lines; expose them as a JSON object.
+        $res = cli_run('health');
+        $h   = ['ok' => $res['ok']];
+        foreach (explode("\n", $res['output']) as $line) {
+            if (!str_contains($line, '=')) continue;
+            [$k, $v] = explode('=', $line, 2);
+            $h[trim($k)] = trim($v);
+        }
+        echo json_encode($h);
+        break;
+
     default:
         http_response_code(400);
         echo json_encode(['ok' => false, 'output' => 'Unknown action']);

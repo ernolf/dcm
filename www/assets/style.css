@@ -19,6 +19,9 @@
     --orange:      #f59e0b;
     --blue:        #3b82f6;
     --input-bg:    #ffffff;
+    --field-bg:    #ffffff;   /* directive value fields */
+    --field-border:#cbd5e1;   /* their resting border — darker than card borders for legibility */
+    --dropin-bg:   #eef1f6;   /* directive cards: a touch grayer than the page so the fields stand out */
     --th-bg:       #f1f5f9;
     --content-width: 1080px;   /* one column unit; wide layouts use 2x */
 }
@@ -30,6 +33,9 @@
     --text:       #e2e8f0;
     --text-muted: #94a3b8;
     --input-bg:   #0f172a;
+    --field-bg:   #1e293b;
+    --field-border:#475569;
+    --dropin-bg:  #0f172a;
     --th-bg:      #0f172a;
 }
 
@@ -183,7 +189,7 @@ body.nav-open .waffle-open { display: flex; }
 
 /* ── Drop-in config cards ────────────────────────────── */
 .dropin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: .6rem; }
-.dropin-item { border: 1px solid var(--border); border-radius: .375rem; padding: .55rem .7rem; background: var(--content-bg); }
+.dropin-item { border: 1px solid var(--border); border-radius: .375rem; padding: .55rem .7rem; background: var(--dropin-bg); }
 .dropin-item.is-default { opacity: .55; }
 .dropin-head { display: flex; align-items: center; gap: .4rem; }
 .dropin-badge { font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0; }
@@ -206,6 +212,12 @@ body.nav-open .waffle-open { display: flex; }
 .switch input:checked + .switch-slider { background: var(--green); }
 .switch input:checked + .switch-slider::before { transform: translateX(18px); }
 .switch input:focus-visible + .switch-slider { box-shadow: 0 0 0 2px rgba(59,130,246,.4); }
+
+/* Control row of an editable directive: the toggle/select sits left, a compact
+   value box right-aligned next to it; a list textarea wraps onto its own row. */
+.dropin-controls { margin-top: .45rem; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem; }
+.dropin-controls input[type=text], .dropin-controls input[type=number] { flex: 0 1 9rem; min-width: 0; margin-left: auto; }
+.dropin-controls textarea { flex: 1 1 100%; }
 
 /* ── Status ──────────────────────────────────────────── */
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -241,17 +253,27 @@ tr.row-disabled td { color: var(--text-muted); }
 .form-row { display: flex; gap: .5rem; align-items: flex-end; flex-wrap: wrap; }
 .form-group { display: flex; flex-direction: column; gap: .25rem; }
 label { font-size: .775rem; font-weight: 500; color: var(--text-muted); }
-input[type=text], input[type=search], select, textarea {
+input[type=text], input[type=search], input[type=number], select, textarea {
     padding: .4rem .6rem; border: 1px solid var(--border); border-radius: .375rem;
     font-size: .825rem; font-family: inherit; background: var(--input-bg); color: var(--text);
     transition: border-color .15s;
 }
-input[type=text]:focus, input[type=search]:focus, select:focus, textarea:focus {
+input[type=text]:focus, input[type=search]:focus, input[type=number]:focus, select:focus, textarea:focus {
     outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(59,130,246,.15);
 }
 input.inp-ip    { width: 140px; font-family: monospace; }
 input.inp-hosts { flex: 1; min-width: 200px; font-family: monospace; }
 textarea { width: 100%; resize: vertical; font-family: monospace; font-size: .8rem; }
+
+/* Directive value fields override the shared input look: their own field colour
+   and a darker resting border so they read as fields on the dropin card. Placed
+   after the base input rules to win same-specificity ties; focus stays blue. */
+.dropin-controls input, .dropin-controls select, .dropin-controls textarea {
+    background: var(--field-bg); border-color: var(--field-border);
+}
+.dropin-controls input:focus, .dropin-controls select:focus, .dropin-controls textarea:focus {
+    border-color: var(--blue);
+}
 
 /* ── Alerts ──────────────────────────────────────────── */
 .alert { padding: .6rem 1rem; border-radius: .375rem; margin-bottom: 1rem; font-size: .825rem; display: flex; align-items: center; gap: .5rem; }
@@ -268,3 +290,33 @@ textarea { width: 100%; resize: vertical; font-family: monospace; font-size: .8r
 .mb-2 { margin-bottom: 1rem; }
 .stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1; }
 .stat-label { font-size: .75rem; color: var(--text-muted); margin-top: .25rem; }
+
+/* ── Notifications: bell, badge dot, dropdown panel, toasts ── */
+/* The 🔔 emoji can't be recoloured via `color`, so the resting bell is muted
+   with grayscale; an active state drops the filter (emoji returns to gold) and
+   adds a soft golden glow. */
+.bell-btn { background: none; border: none; font-size: 1.05rem; cursor: pointer; padding: .2rem .35rem; line-height: 1; filter: grayscale(1); opacity: .5; transition: filter .2s, opacity .2s; }
+.bell-btn:hover { opacity: .8; }
+.bell-btn.has-notif { filter: drop-shadow(0 0 5px rgba(250,204,21,.85)); opacity: 1; }
+@keyframes bell-shake {
+    0%, 100% { transform: rotate(0); }
+    12% { transform: rotate(15deg); }
+    24% { transform: rotate(-13deg); }
+    36% { transform: rotate(10deg); }
+    48% { transform: rotate(-8deg); }
+    62% { transform: rotate(5deg); }
+    76% { transform: rotate(-3deg); }
+    88% { transform: rotate(1deg); }
+}
+.bell-btn.shake { animation: bell-shake .65s ease-in-out; transform-origin: 50% 2px; }
+.bell-panel { position: fixed; top: 56px; right: 12px; z-index: 320; width: min(360px, calc(100vw - 24px)); background: var(--card-bg); border: 1px solid var(--border); border-radius: .5rem; box-shadow: 0 8px 28px rgba(0,0,0,.28); overflow: hidden; display: none; }
+.bell-panel.open { display: block; }
+.bell-panel-head { padding: .6rem .85rem; border-bottom: 1px solid var(--border); font-weight: 600; font-size: .8rem; }
+.bell-panel-body { max-height: 60vh; overflow-y: auto; }
+.bell-item { display: block; padding: .65rem .85rem; border-bottom: 1px solid var(--border); font-size: .8rem; line-height: 1.4; color: var(--text); text-decoration: none; }
+.bell-item:last-child { border-bottom: none; }
+.bell-item:hover { background: var(--th-bg); }
+.bell-empty { padding: .9rem .85rem; font-size: .8rem; color: var(--text-muted); }
+.toast-wrap { position: fixed; top: 64px; right: 16px; z-index: 400; display: flex; flex-direction: column; gap: .5rem; align-items: flex-end; }
+.toast { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: .4rem; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: .6rem .85rem; font-size: .8rem; max-width: 320px; opacity: 0; transform: translateY(-8px); transition: opacity .25s, transform .25s; }
+.toast.show { opacity: 1; transform: translateY(0); }

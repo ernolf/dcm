@@ -105,6 +105,9 @@ Usage: $(basename "$0") <command>
   tail-f  local|remote     Stream log in real time (tail -F)
   stats   local|remote [all|today|1h|24h|7d]
                            Output log analytics as key=value / TSV
+  health                   Report live sync/restart state as key=value (web UI)
+  diff                     List what a sync would change on each remote node
+  restart-needed           Print 'needed' or 'ok' for this node (used by health)
 EOF
 }
 
@@ -309,6 +312,94 @@ END {
 '
 }
 
+# Join arguments with commas (no args -> empty string).
+join_csv() { local IFS=,; echo "$*"; }
+
+# Reachability probe for a remote node — fast, never prompts.
+node_up() {
+    ssh -o ConnectTimeout=4 -o BatchMode=yes "root@$1" true 2>/dev/null
+}
+
+# Does the content differ from ${node}? 0 = in sync, 1 = differs. Uses rsync's
+# dry-run itemiser with --checksum (so a mere mtime change does not count) and
+# ignores pure attribute / directory lines (starting with '.') — only real
+# content changes remain.
+node_in_sync() {
+    local node="$1" f
+    if rsync -nic -a --delete --exclude='listen.conf' \
+            "${DNSMASQ_D}/" "root@${node}:${DNSMASQ_D}/" 2>/dev/null | grep -qvE '^\.'; then
+        return 1
+    fi
+    for f in "${DEFAULT_FILE}" "${NODES_FILE}" /usr/local/sbin/dcm-cli; do
+        if rsync -nic -a "${f}" "root@${node}:${f}" 2>/dev/null | grep -qvE '^\.'; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# 0 = a restart is needed (a drop-in is newer than dnsmasq's start time), 1 = ok.
+# listen.conf is excluded: it is regenerated on every sync, so its mtime would
+# otherwise raise a permanent false alarm.
+restart_needed_local() {
+    local newest start
+    newest=$(find "${DNSMASQ_D}" -maxdepth 1 -name '*.conf' ! -name 'listen.conf' \
+                  -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+    [[ -z "${newest}" ]] && return 1
+    start=$(date -d "$(systemctl show dnsmasq -p ActiveEnterTimestamp --value 2>/dev/null)" \
+                 +%s 2>/dev/null || echo 0)
+    [[ "${start}" -eq 0 ]] && return 1
+    if (( ${newest%.*} > start )); then return 0; else return 1; fi
+}
+
+# Live cluster health for the web UI's notifications. Machine-readable:
+#   sync=ok|stale       sync-nodes=<comma-separated remotes that differ>
+#   restart=ok|needed   restart-nodes=<comma-separated nodes to restart>
+# Unreachable nodes are skipped — the Dashboard's status dot covers liveness.
+cmd_health() {
+    local node sync_stale=() restart_nodes=()
+
+    restart_needed_local && restart_nodes+=("${SELF}")
+
+    while IFS= read -r node; do
+        node_up "${node}" || continue
+        node_in_sync "${node}" || sync_stale+=("${node}")
+        if ssh -o ConnectTimeout=4 -o BatchMode=yes "root@${node}" \
+               /usr/local/sbin/dcm-cli restart-needed 2>/dev/null | grep -q '^needed$'; then
+            restart_nodes+=("${node}")
+        fi
+    done < <(remote_nodes)
+
+    echo "sync=$([[ ${#sync_stale[@]} -gt 0 ]] && echo stale || echo ok)"
+    echo "sync-nodes=$(join_csv "${sync_stale[@]}")"
+    echo "restart=$([[ ${#restart_nodes[@]} -gt 0 ]] && echo needed || echo ok)"
+    echo "restart-nodes=$(join_csv "${restart_nodes[@]}")"
+}
+
+# Human-readable list of what a sync would change on each remote node — the
+# detail behind health's sync=stale. Prints changed paths, not rsync's codes.
+cmd_diff() {
+    local node f any line
+    while IFS= read -r node; do
+        echo "=== ${node} ==="
+        if ! node_up "${node}"; then
+            echo "  unreachable"; echo; continue
+        fi
+        any=0
+        while IFS= read -r line; do
+            [[ -n "${line}" ]] || continue
+            echo "  ${DNSMASQ_D}/${line}"; any=1
+        done < <(rsync -nic -a --delete --exclude='listen.conf' \
+                     "${DNSMASQ_D}/" "root@${node}:${DNSMASQ_D}/" 2>/dev/null \
+                  | grep -vE '^\.' | awk '{print $NF}')
+        for f in "${DEFAULT_FILE}" "${NODES_FILE}" /usr/local/sbin/dcm-cli; do
+            rsync -nic -a "${f}" "root@${node}:${f}" 2>/dev/null | grep -qvE '^\.' && { echo "  ${f}"; any=1; }
+        done
+        [[ "${any}" -eq 0 ]] && echo "  in sync"
+        echo
+    done < <(remote_nodes)
+}
+
 # ----------------------------------------
 
 case "${1:-}" in
@@ -338,6 +429,15 @@ case "${1:-}" in
         ;;
     stats)
         cmd_stats "${2:-local}" "${3:-all}"
+        ;;
+    health)
+        cmd_health
+        ;;
+    diff)
+        cmd_diff
+        ;;
+    restart-needed)
+        restart_needed_local && echo needed || echo ok
         ;;
     *)
         usage; exit 1

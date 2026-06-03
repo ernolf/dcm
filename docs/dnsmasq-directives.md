@@ -57,7 +57,6 @@ For a plain default-off flag, states 1 and 3 collapse: "off" simply means the di
 |---|---|---|---|---|---|---|
 | `log-queries` | flag | off (no query log) | `log-queries` | removed | — | **Toggle.** OFF greys out `log-facility` and removes **live.php / analytics.php** from the nav |
 | `log-facility` | path | syslog (DAEMON) | `log-facility=<path>` | removed → syslog | — | **managed drop-in** (`log-facility.conf`); otherwise locked |
-| `log-async` | int/flag | off (synchronous) | `log-async[=N]` (default 5, max 100) | removed | — | optional |
 
 ## B — Name / domain handling
 

@@ -57,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if (isset($_GET['saved'])) $msg = ['ok', saved_hint()];
 $entries = $file->entries();
 
 page_start('Hosts', __FILE__, 'narrow');

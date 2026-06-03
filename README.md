@@ -21,9 +21,10 @@ manages a two-node dnsmasq cluster from a single place:
 - add, toggle and delete hosts
 - relocate VM records between subnets
 - edit dnsmasq options through a per-directive Configuration page
-- sync the configuration to all nodes
+- see exactly what differs between nodes, then sync the configuration to all nodes
 - restart the service
-- watch both servers' query logs live with per-server analytics.
+- watch both servers' query logs live with per-server analytics
+- get live in-app notifications when the nodes drift out of sync or a restart is pending.
 
 The web frontend drives a single privileged CLI backend (`dcm-cli`) over `sudo`.
 
@@ -46,6 +47,8 @@ dcm does not duplicate dnsmasq's settings — it **reads every path from dnsmasq
 | log file | `log-facility` in the drop-ins |
 
 The only dcm-owned paths are the binary (`/usr/local/sbin/dcm-cli`) and the node list (`/etc/dcm/nodes`).
+
+Every page carries a **bell** that polls `dcm-cli health`: it stays muted while all is well and glows when a node's configuration differs (compared by **content**, so a mere timestamp change does not count) or a drop-in is newer than the running dnsmasq — i.e. a sync or restart is pending. The Dashboard's **What differs?** button (`dcm-cli diff`) then lists the exact paths.
 
 See [`docs/architecture.md`](docs/architecture.md) for diagrams and the full design.
 
@@ -315,6 +318,9 @@ dcm-cli status  local|remote           systemctl status dnsmasq
 dcm-cli logs    [N]                    last N log lines (default 200)
 dcm-cli tail-f  local|remote           stream the log (used by the live view)
 dcm-cli stats   local|remote [period]  log analytics (all|today|1h|24h|7d)
+dcm-cli health                         live sync/restart state as key=value (used by the UI bell)
+dcm-cli diff                           list what a sync would change on each remote node
+dcm-cli restart-needed                 print 'needed' or 'ok' for this node (used by health)
 ```
 
 ## License

@@ -55,10 +55,11 @@ page_start('Dashboard', __FILE__, 'narrow');
   <div class="card-header">Controls</div>
   <div class="card-body">
     <div class="btn-group">
-      <button class="btn btn-primary"  onclick="run('sync')">↻ Sync</button>
-      <button class="btn btn-success"  onclick="run('restart','local')">⟳ Restart local</button>
-      <button class="btn btn-warning"  onclick="run('restart','remote')">⟳ Restart remote</button>
-      <button class="btn btn-danger"   onclick="run('restart','all')">⟳ Restart all</button>
+      <button class="btn btn-secondary" onclick="run('diff')">⤳ What differs?</button>
+      <button class="btn btn-primary"   onclick="run('sync')">↻ Sync</button>
+      <button class="btn btn-success"   onclick="run('restart','local')">⟳ Restart local</button>
+      <button class="btn btn-warning"   onclick="run('restart','remote')">⟳ Restart remote</button>
+      <button class="btn btn-danger"    onclick="run('restart','all')">⟳ Restart all</button>
     </div>
   </div>
 </div>
@@ -99,7 +100,9 @@ async function run(action, target) {
     const d = await post(data);
     document.getElementById('out').textContent = d.output;
     if (action === 'restart') {
-        setTimeout(() => NODES.forEach(loadStatus), 2000);
+        setTimeout(() => { NODES.forEach(loadStatus); if (window.dcmHealthPoll) dcmHealthPoll(); }, 2000);
+    } else if (action === 'sync' && window.dcmHealthPoll) {
+        dcmHealthPoll();
     }
 }
 

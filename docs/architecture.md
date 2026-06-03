@@ -122,6 +122,7 @@ PHP calls it via `sudo` (sudoers: `www-data ALL=(root) NOPASSWD: /usr/local/sbin
 - **Single source of truth for paths**: reads `CONFIG_DIR` from `/etc/default/dnsmasq`, then `addn-hosts` / `log-facility` from the merged drop-ins
 - **Single source of truth for swarm members**: `/etc/dcm/nodes` (hostname list only)
 - **`listen.conf` is never synced**: regenerated from `hosts/local` after every sync
+- **Content-based drift detection**: `health` and `diff` dry-run `rsync --checksum`, so a node counts as out of sync only when file *content* differs — a mere mtime change is ignored — and `listen.conf` is excluded (it is intentionally per-node)
 - **`LC_ALL=C` for all `date` calls**: dnsmasq logs in English (`May 31`), system locale is German (`Mai 31`)
 
 ### Commands
@@ -133,6 +134,9 @@ status  local|remote           systemctl status dnsmasq
 logs    [N]                    tail -n N of log file
 tail-f  local|remote           tail -F — streaming, used by SSE live log endpoint
 stats   local|remote [period]  single-pass awk analytics (all|today|1h|24h|7d)
+health                         Live sync/restart state as key=value, polled by the UI bell
+diff                           Human-readable list of what a sync would change per remote node
+restart-needed                 'needed'/'ok' for this node (a drop-in newer than dnsmasq's start); used by health
 ```
 
 ### Sync flow
@@ -166,16 +170,27 @@ Also: `https://adblock.global-social.net/` (ad-server sink — served by same Ap
 
 ### Page map
 
+The sidebar order matches this table.
+
 | Page | File | Description |
 |---|---|---|
-| Dashboard | `dashboard.php` | Server status (incl. listen addresses + port), Sync/Restart controls with live output |
+| Dashboard | `dashboard.php` | Server status (incl. listen addresses + port), **What differs?** / Sync / Restart controls with live output |
+| Configuration | `dnsconf.php` | Per-directive drop-in editor — schema-driven switches/selects with dnsmasq manual help |
 | Hosts | `hosts.php` | Edit `hosts/local` — add/remove/enable/disable entries |
 | Virtual Machines | `vms.php` | Edit `hosts/vms` + one-click subnet relocation |
 | Block List | `block.php` | View `hosts/block` grouped by redirect IP |
 | Upstream DNS | `upstream.php` | Per-directive editor for the upstream group (no-resolv, resolv-file, server, …); servers go to `upstream.conf` |
-| Configuration | `dnsconf.php` | Per-directive drop-in editor — schema-driven switches/selects with dnsmasq manual help |
 | Live Log | `live.php` | Real-time SSE log viewer, two panels (local + remote), color-coded, layout toggle, dark mode |
 | Analytics | `analytics.php` | Full log analysis — time range + server filter, persisted via cookie |
+
+### Notifications
+
+A bell in the top bar of every page is fed by polling `action.php?action=health` → `dcm-cli health` (on load, every 60 s, and immediately after a Sync/Restart on the Dashboard). It is greyed out when all is well and glows gold when there is something to do, derived purely from live state — no database:
+
+- **Sync pending** — a node's configuration differs (content-compared via `rsync --checksum`).
+- **Restart pending** — a drop-in is newer than the running dnsmasq on some node (`restart-needed`).
+
+Clicking a notification jumps to the Dashboard, where **What differs?** (`dcm-cli diff`) lists the exact paths. Transient confirmations such as *Saved.* appear as a top-right toast and are not persisted (the editable pages redirect to `?saved=1`, the toast fires once, then the query is stripped so a refresh does not repeat it). A persisted fault/notification history (unreachable node, lost upstream, with timestamps) backed by SQLite is a planned phase-2 feature.
 
 ### Security architecture
 
@@ -268,3 +283,5 @@ VMs in `hosts/vms` keep a fixed last octet across all networks. When the laptop 
 - **Auth**: `inc/auth.php` is a stub — always passes. Add HTTP Basic Auth or session login when external access is needed.
 - **Compressed logs**: `.log.2.gz` and older not yet analyzed — add `zcat` support for longer time ranges.
 - **Block list**: read-only in UI. Editing requires `hosts/block` to be owned by `www-data`.
+- **Notification history (phase 2)**: the bell reflects live state only; persist faults/events (unreachable node, lost upstream, with timestamps) in SQLite, fed by a periodic background check.
+- **Theming**: a Skin/Style page to pick light/dark palettes and custom accent colours, built on the existing CSS variables and stored in SQLite.

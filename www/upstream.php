@@ -45,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['srv_action'])) {
 $save    = dropin_form_save($dirs, 2, 'upstream.php');
 $desired = $save['desired'];
 $msg     = $save['msg'];
-if (isset($_GET['saved'])) $msg = ['ok', saved_hint()];
 
 $merged  = dropins_merge(DNSMASQ_D);
 $postErr = $msg && $msg[0] === 'err';

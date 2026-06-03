@@ -76,12 +76,20 @@ function page_start(string $title, string $current, string $width = ''): void {
   </div>
   <div class="topbar-title"><?= h($title) ?></div>
   <div class="topbar-actions">
+    <button class="bell-btn" id="bell-btn" onclick="toggleBell(event)" aria-label="Notifications">🔔</button>
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
   </div>
 </header>
 
 <!-- Nav overlay backdrop -->
 <div class="nav-backdrop" id="nav-backdrop" onclick="closeNav()"></div>
+
+<!-- Notifications: dropdown panel + transient toasts -->
+<div class="bell-panel" id="bell-panel" onclick="event.stopPropagation()">
+  <div class="bell-panel-head">Notifications</div>
+  <div class="bell-panel-body" id="bell-list"><div class="bell-empty">No notifications.</div></div>
+</div>
+<div class="toast-wrap" id="toast-wrap"></div>
 
 <!-- Slide-in nav panel -->
 <nav class="nav-panel" id="nav-panel">
@@ -129,6 +137,148 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('theme-btn').textContent = isDark ? '☀' : '🌙';
 });
 </script>
+
+<script>
+// Notifications: a transient toast plus a bell with a badge dot, fed by
+// 'dcm-cli health' (live sync/restart state). dcmToast is global so editable
+// pages can confirm a save without a sticky banner.
+function dcmToast(msg, kind) {
+    const wrap = document.getElementById('toast-wrap');
+    if (!wrap) return;
+    const t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' toast-' + kind : '');
+    t.textContent = msg;
+    wrap.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 9000);
+}
+function toggleBell(ev) {
+    ev.stopPropagation();
+    document.getElementById('bell-panel').classList.toggle('open');
+}
+document.addEventListener('click', () => document.getElementById('bell-panel').classList.remove('open'));
+
+(function () {
+    const bell = document.getElementById('bell-btn');
+    let toastSeen = new Set();   // in-memory: toast each health message once per page
+    let first = true;
+    let shakeTimer = null;       // periodic reminder shake while anything is pending
+    let audioCtx = null;
+
+    function shake() {
+        if (!bell) return;
+        bell.classList.remove('shake');
+        void bell.offsetWidth;       // reflow so the animation can restart
+        bell.classList.add('shake');
+    }
+    if (bell) bell.addEventListener('animationend', () => bell.classList.remove('shake'));
+
+    function ring() {
+        try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const t0 = audioCtx.currentTime;
+            [880, 1320].forEach((freq, i) => {        // short two-tone bell ding
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const t = t0 + i * 0.06;
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+                osc.connect(gain).connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.65);
+            });
+        } catch (e) { /* Web Audio unavailable — the shake still fires */ }
+    }
+    // Browsers block audio until a user gesture; prime/resume the context on any click.
+    document.addEventListener('click', () => {
+        try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        } catch (e) {}
+    });
+
+    // Ids already announced with a ring, kept across reloads so navigating while
+    // something is pending does not ring again — only a newly appearing one does.
+    function rungIds() {
+        try { return new Set(JSON.parse(sessionStorage.getItem('dcm-rung') || '[]')); }
+        catch (e) { return new Set(); }
+    }
+    function storeRung(ids) {
+        try { sessionStorage.setItem('dcm-rung', JSON.stringify(ids)); } catch (e) {}
+    }
+
+    function messages(d) {
+        const m = [];
+        if (d.sync === 'stale') {
+            const n = d['sync-nodes'] ? ' (' + d['sync-nodes'] + ')' : '';
+            m.push({id: 'sync', text: 'Configuration differs from another node' + n + ' — run Sync on the Dashboard.'});
+        }
+        if (d.restart === 'needed') {
+            const n = d['restart-nodes'] ? ' (' + d['restart-nodes'] + ')' : '';
+            m.push({id: 'restart', text: 'Settings changed' + n + ' — restart dnsmasq on the Dashboard.'});
+        }
+        return m;
+    }
+    function render(m) {
+        document.getElementById('bell-btn').classList.toggle('has-notif', m.length > 0);
+        const list = document.getElementById('bell-list');
+        if (!m.length) { list.innerHTML = '<div class="bell-empty">No notifications.</div>'; return; }
+        list.innerHTML = '';
+        m.forEach(x => {
+            const a = document.createElement('a');
+            a.className = 'bell-item';
+            a.href = 'dashboard.php';
+            a.textContent = x.text;
+            list.appendChild(a);
+        });
+    }
+    async function poll() {
+        let d;
+        try {
+            const r = await fetch('action.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'action=health'
+            });
+            d = await r.json();
+        } catch (e) { return; }
+        const m = messages(d);
+        render(m);
+
+        if (!first) m.forEach(x => { if (!toastSeen.has(x.id)) dcmToast(x.text); });
+        toastSeen = new Set(m.map(x => x.id));
+
+        const ids  = m.map(x => x.id);
+        const rung = rungIds();
+        if (ids.some(id => !rung.has(id))) { shake(); ring(); }   // a new notification arrived
+        storeRung(ids);
+
+        if (ids.length && !shakeTimer)        shakeTimer = setInterval(shake, 15000);
+        else if (!ids.length && shakeTimer) { clearInterval(shakeTimer); shakeTimer = null; }
+
+        first = false;
+    }
+    window.dcmHealthPoll = poll;   // let the Dashboard re-check right after sync/restart
+    poll();
+    setInterval(poll, 60000);
+})();
+
+// Confirm a save with a transient toast instead of a sticky banner; the bell
+// then carries the follow-up (sync/restart) as a live state. Drop the 'saved'
+// query afterwards so a manual refresh does not toast again.
+(function () {
+    const sp = new URLSearchParams(location.search);
+    if (!sp.has('saved')) return;
+    dcmToast('Saved.');
+    sp.delete('saved');
+    const q = sp.toString();
+    history.replaceState({}, '', location.pathname + (q ? '?' + q : ''));
+})();
+</script>
 <?php
 }
 
@@ -143,10 +293,4 @@ function h(string $s): string {
 function alert(string $type, string $msg): void {
     $cls = $type === 'ok' ? 'alert-ok' : 'alert-err';
     echo '<div class="alert ' . $cls . '">' . h($msg) . '</div>';
-}
-
-// Standard "saved" notice — every editable page shows the same follow-up so the
-// user knows a change still has to be synced to the other nodes and applied.
-function saved_hint(): string {
-    return 'Saved. Run Sync on the Dashboard to push it to the other nodes, then Restart dnsmasq to apply.';
 }

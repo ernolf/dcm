@@ -110,15 +110,22 @@ function dropin_form_render(array $dirs, array $groups, array $man, array $merge
         <?php endif; ?>
 
         <?php if ($editable): ?>
-        <div style="margin-top:.45rem;display:flex;flex-direction:column;gap:.4rem">
-          <?php if ($useSwitch): ?>
+        <div class="dropin-controls">
+          <?php if ($useSwitch):
+            // Value switches show the dnsmasq default next to "Default" so the
+            // off state's effect is visible; pure flags just read "Default".
+            $offLabel = 'Default';
+            if ($showValue && ($entry['default'] ?? '') !== '') {
+                $offLabel .= ' (' . (string) $entry['default'] . ')';
+            }
+          ?>
           <label class="switch-row">
             <span class="switch">
               <input type="checkbox" name="state[<?= h($key) ?>]" value="on"<?= $state === 'on' ? ' checked' : '' ?>
-                     onchange="this.closest('.switch-row').querySelector('.switch-text').textContent = this.checked ? 'Enabled' : 'Default'">
+                     data-off-label="<?= h($offLabel) ?>">
               <span class="switch-slider"></span>
             </span>
-            <span class="switch-text"><?= $state === 'on' ? 'Enabled' : 'Default' ?></span>
+            <span class="switch-text"><?= $state === 'on' ? 'Enabled' : h($offLabel) ?></span>
           </label>
           <?php else: ?>
           <select name="state[<?= h($key) ?>]">
@@ -129,16 +136,29 @@ function dropin_form_render(array $dirs, array $groups, array $man, array $merge
             <?php if ($entry['on'] !== null): ?>
             <option value="on"<?= $state === 'on' ? ' selected' : '' ?>>Enabled</option>
             <?php endif; ?>
-            <?php if (($entry['off'] ?? null) !== null): ?>
-            <option value="off"<?= $state === 'off' ? ' selected' : '' ?>>Disabled</option>
+            <?php if (($entry['off'] ?? null) !== null):
+              $offv = dropin_template_value($entry['off']); ?>
+            <option value="off"<?= $state === 'off' ? ' selected' : '' ?>>Disabled<?php
+              if ($offv !== null && $offv !== '') echo ' (' . h($offv) . ')';
+            ?></option>
             <?php endif; ?>
           </select>
           <?php endif; ?>
           <?php if ($showValue && $type === 'list'): ?>
           <textarea name="value[<?= h($key) ?>]" rows="3" placeholder="one value per line"><?= h($cur['input']) ?></textarea>
-          <?php elseif ($showValue): ?>
-          <input type="text" name="value[<?= h($key) ?>]" value="<?= h($cur['input']) ?>"
-                 placeholder="<?= h((string) ($entry['valdefault'] ?? $entry['default'] ?? '')) ?>">
+          <?php elseif ($showValue):
+            $isNum = $type === 'int';
+            // The value box is shown only while the directive is active (see the
+            // script below), so it carries no default placeholder — the user
+            // always types a real value when enabling it.
+          ?>
+          <input type="<?= $isNum ? 'number' : 'text' ?>" name="value[<?= h($key) ?>]" value="<?= h($cur['input']) ?>"<?php
+            if ($isNum) {
+                echo ' inputmode="numeric" step="1"';
+                if (isset($entry['min'])) echo ' min="' . (int) $entry['min'] . '"';
+                if (isset($entry['max'])) echo ' max="' . (int) $entry['max'] . '"';
+            }
+          ?>>
           <?php endif; ?>
         </div>
         <?php else:
@@ -195,6 +215,29 @@ function hideMan() { if (manPop) manPop.style.display = 'none'; }
 document.addEventListener('click', hideMan);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') hideMan(); });
 window.addEventListener('scroll', hideMan, true);
+
+// A value box only makes sense while its directive is active. Hide it whenever
+// the control is in a state where the value is fixed by dnsmasq's default or the
+// off form: a switch that is off, or a three-state select on Default/Disabled.
+// There is no placeholder, so enabling always asks for a fresh value; entering 0
+// in cache-size writes cache-size=0, which reads back as Disabled on next load.
+document.querySelectorAll('.dropin-controls').forEach(box => {
+    const ctl = box.querySelector('input[type="checkbox"][name^="state["], select[name^="state["]');
+    if (!ctl) return;
+    const value = box.querySelector('[name^="value["]');
+    const text  = box.querySelector('.switch-text');
+    const isOn  = () => ctl.tagName === 'SELECT' ? ctl.value === 'on' : ctl.checked;
+    const sync  = focus => {
+        const on = isOn();
+        if (text) text.textContent = on ? 'Enabled' : (ctl.dataset.offLabel || 'Default');
+        if (value) {
+            value.style.display = on ? '' : 'none';
+            if (on && focus) value.focus();
+        }
+    };
+    ctl.addEventListener('change', () => sync(true));
+    sync(false);
+});
 
 // Enable "Save changes" only while the form differs from its loaded state.
 (function () {

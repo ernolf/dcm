@@ -20,7 +20,6 @@ $groups = array_filter(dnsmasq_groups(), fn($g) => ($g['phase'] ?? 1) === 1);
 $save    = dropin_form_save($dirs, 1, 'dnsconf.php');
 $desired = $save['desired'];
 $msg     = $save['msg'];
-if (isset($_GET['saved'])) $msg = ['ok', saved_hint()];
 
 $merged  = dropins_merge(DNSMASQ_D);
 $postErr = $msg && $msg[0] === 'err';

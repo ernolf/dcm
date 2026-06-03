@@ -68,8 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if (isset($_GET['saved'])) $msg = ['ok', saved_hint()];
-
 $entries       = $file->entries();
 $current_prefix = detect_prefix($entries);
 

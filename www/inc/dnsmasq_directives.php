@@ -77,19 +77,10 @@ function dnsmasq_directives(): array {
             'off'     => null,
             'managed' => true,
         ],
-        'log-async' => [
-            'group'      => 'logging',
-            'label'      => 'Asynchronous logging',
-            'type'       => 'flag',
-            'help'       => 'Queue log lines instead of blocking on each write. Optional queue length 0-100; default 5 when enabled.',
-            'default'    => 'off',
-            'on'         => 'log-async',
-            'off'        => null,
-            'optval'     => true,   // the flag may carry an optional =N value
-            'valdefault' => 5,
-            'min'        => 0,
-            'max'        => 100,
-        ],
+        // log-async is intentionally omitted: dnsmasq forces max_logs = 0 when
+        // log-facility points at a file (log_start() in log.c), so asynchronous
+        // logging has no effect in our file-based setup — it only matters for
+        // syslog. Exposing it would be a no-op control.
 
         // ── B — Name & domain handling ─────────────────────────────────────
         'domain-needed' => [
