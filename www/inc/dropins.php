@@ -168,7 +168,7 @@ function dropins_apply(string $dir, array $dirs, array $desired, int $editPhase 
                 $errors[] = sprintf('could not remove %s', $name);
             }
         } else {
-            if (@file_put_contents($file, implode("\n", $lines) . "\n") === false) {
+            if (!@write_if_changed($file, implode("\n", $lines) . "\n")) {
                 $errors[] = sprintf('could not write %s', $name);
             }
         }

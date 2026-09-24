@@ -62,7 +62,7 @@ class HostsFile {
     public function save(): bool {
         $content = implode("\n", $this->lines);
         if (!str_ends_with($content, "\n")) $content .= "\n";
-        return file_put_contents($this->path, $content) !== false;
+        return write_if_changed($this->path, $content);
     }
 
     /** Returns the raw file content for textarea editing. */

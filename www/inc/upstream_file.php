@@ -54,6 +54,6 @@ class UpstreamFile {
     public function save(): bool {
         $content = implode("\n", $this->lines);
         if ($content !== '' && !str_ends_with($content, "\n")) $content .= "\n";
-        return file_put_contents($this->path, $content) !== false;
+        return write_if_changed($this->path, $content);
     }
 }

@@ -43,3 +43,11 @@ define('CLI',           '/usr/local/sbin/dcm-cli');
 define('LOG_FILE',      $_log);
 
 unset($_dconf, $_ddir, $_hosts, $_log, $_l, $_m, $_sources, $_cf);
+
+// Writes only when the content really differs. dcm decides "restart needed"
+// from the file mtimes against dnsmasq's start time, so rewriting a file with
+// identical content would raise a restart alarm for a change that never was.
+function write_if_changed(string $path, string $content): bool {
+    if (is_file($path) && file_get_contents($path) === $content) return true;
+    return file_put_contents($path, $content) !== false;
+}
