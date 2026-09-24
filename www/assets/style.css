@@ -56,8 +56,9 @@ body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; backg
     box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 
-/* Waffle icon button */
-.waffle-btn {
+/* Sidebar toggle: three lines, with a chevron added while the sidebar is open
+   to show that clicking it sends the sidebar back to the left. */
+.nav-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -67,35 +68,16 @@ body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; backg
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 3px;
     transition: background .15s;
 }
-.waffle-btn:hover { background: var(--nav-hover); }
+.nav-btn:hover { background: var(--nav-hover); }
 
-.waffle-icon {
-    display: grid;
-    grid-template-columns: repeat(3, 5px);
-    grid-template-rows: repeat(3, 5px);
-    gap: 2.5px;
-}
-.waffle-icon b {
-    display: block;
-    width: 5px; height: 5px;
-    background: currentColor;
-    border-radius: 1px;
-    font-weight: normal;
-}
-.waffle-open {
-    display: none;
-    align-items: center;
-    gap: 3px;
-}
-.waffle-open-lines { display: flex; flex-direction: column; gap: 3px; }
-.waffle-open-lines b { display: block; width: 13px; height: 2px; background: currentColor; border-radius: 1px; font-weight: normal; }
-.waffle-open-chevron { font-size: 1rem; line-height: 1; font-weight: 300; }
+.nav-lines { display: flex; flex-direction: column; gap: 3px; }
+.nav-lines b { display: block; width: 13px; height: 2px; background: currentColor; border-radius: 1px; font-weight: normal; }
+.nav-chevron { display: none; font-size: 1rem; line-height: 1; font-weight: 300; }
 
-body.nav-open .waffle-icon { display: none; }
-body.nav-open .waffle-open { display: flex; }
+body.nav-open .nav-chevron { display: block; }
 
 /* Brand */
 .topbar-brand { display: flex; align-items: center; flex-shrink: 0; }

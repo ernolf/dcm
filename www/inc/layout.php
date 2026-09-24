@@ -63,14 +63,9 @@ function page_start(string $title, string $current, string $width = ''): void {
 
 <!-- Fixed top bar -->
 <header class="topbar">
-  <button class="waffle-btn" id="nav-toggle" onclick="toggleNav()" aria-label="Navigation">
-    <span class="waffle-icon">
-      <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
-    </span>
-    <span class="waffle-open">
-      <span class="waffle-open-lines"><b></b><b></b><b></b></span>
-      <span class="waffle-open-chevron">‹</span>
-    </span>
+  <button class="nav-btn" id="nav-toggle" onclick="toggleNav()" aria-label="Navigation">
+    <span class="nav-lines"><b></b><b></b><b></b></span>
+    <span class="nav-chevron">‹</span>
   </button>
   <div class="topbar-brand">
     <img src="assets/logo.svg" class="topbar-logo" alt="dnsmasq cluster manager">
