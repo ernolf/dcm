@@ -24,7 +24,7 @@ manages a two-node dnsmasq cluster from a single place:
 - see exactly what differs between nodes, then sync the configuration to all nodes
 - restart the service
 - watch both servers' query logs live with per-server analytics
-- get live in-app notifications when the nodes drift out of sync or a restart is pending.
+- get live in-app notifications when the nodes drift out of sync, a restart is pending, or the nodes no longer run the same dnsmasq.
 
 The web frontend drives a single privileged CLI backend (`dcm-cli`) over `sudo`.
 
@@ -46,7 +46,9 @@ dcm does not duplicate dnsmasq's settings — it **reads every path from dnsmasq
 | hosts dir | `addn-hosts` in the drop-ins |
 | log file | `log-facility` in the drop-ins |
 
-The only dcm-owned paths are the binary (`/usr/local/sbin/dcm-cli`) and the node list (`/etc/dcm/nodes`).
+The only dcm-owned paths are the binary (`/usr/local/sbin/dcm-cli`), the node list (`/etc/dcm/nodes`) and the build cache (`/var/lib/dcm/cluster-build`).
+
+No dnsmasq version is written into dcm. Every node reports its own build — version, compile time options and the options its binary accepts — and the Configuration page offers only what the weakest node in the cluster understands, so a setting that the oldest node would refuse to start with cannot be written in the first place.
 
 Every page carries a **bell** that polls `dcm-cli health`: it stays muted while all is well and glows when a node's configuration differs (compared by **content**, so a mere timestamp change does not count) or a drop-in is newer than the running dnsmasq — i.e. a sync or restart is pending. The Dashboard's **What differs?** button (`dcm-cli diff`) then lists the exact paths.
 
@@ -54,7 +56,7 @@ See [`docs/architecture.md`](docs/architecture.md) for diagrams and the full des
 
 ## Requirements
 
-- Two or more Debian/Ubuntu nodes running `dnsmasq`.
+- Two or more Debian/Ubuntu nodes running `dnsmasq`, all of them the **same version**: one identical configuration goes to every node, and dnsmasq refuses to start on an option it does not know. dcm reports a mismatch and holds the UI to what the oldest node supports until it is resolved.
 - On the node that serves the UI: a web server (Apache2 in the example below) and PHP-FPM (8.x).
 - `rsync` and passwordless **root** SSH from the UI node to every other node.
 - `addn-hosts` set to a **directory** (not a single file) — dcm keeps its host files there. The setup below creates this drop-in; query logging is switched on later in the UI.
@@ -301,6 +303,7 @@ sudo dcm-cli restart all
 |---|---|---|
 | `/usr/local/sbin/dcm-cli` | root `755` | CLI backend, identical on every node |
 | `/etc/dcm/nodes` | root | node short-hostnames, one per line |
+| `/var/lib/dcm/cluster-build` | root `644` | each node's dnsmasq version and build, written by `health`, read by the UI |
 | `/etc/sudoers.d/dcm-cli` | root `440` | lets `www-data` run `dcm-cli` as root |
 | `/var/www/dcm` | www-data | web frontend |
 | `/etc/dnsmasq.d` | `root:www-data` `2775` | drop-in dir; UI creates/removes `<directive>.conf` here |
@@ -318,9 +321,9 @@ dcm-cli status  local|remote           systemctl status dnsmasq
 dcm-cli logs    [N]                    last N log lines (default 200)
 dcm-cli tail-f  local|remote           stream the log (used by the live view)
 dcm-cli stats   local|remote [period]  log analytics (all|today|1h|24h|7d)
-dcm-cli health                         live sync/restart state as key=value (used by the UI bell)
+dcm-cli health                         live sync/restart/build state as key=value (used by the UI bell)
 dcm-cli diff                           list what a sync would change on each remote node
-dcm-cli restart-needed                 print 'needed' or 'ok' for this node (used by health)
+dcm-cli node-report                    this node's restart state and dnsmasq build (used by health)
 ```
 
 ## License

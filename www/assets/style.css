@@ -215,6 +215,7 @@ body.nav-open .waffle-open { display: flex; }
 .dropin-key  { font-family: monospace; font-size: .68rem; color: var(--text-muted); margin-top: .1rem; }
 .dropin-help { font-size: .72rem; color: var(--text-muted); margin-top: .25rem; line-height: 1.35; }
 .dropin-rec  { font-size: .7rem; color: var(--green); margin-top: .2rem; font-weight: 500; }
+.dropin-blocked { font-size: .7rem; color: var(--red); margin-top: .2rem; font-weight: 500; }
 .dropin-val  { font-family: monospace; font-size: .74rem; margin-top: .4rem; word-break: break-all; }
 .man-btn { margin-left: auto; flex-shrink: 0; width: 16px; height: 16px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: none; color: var(--text-muted); font-size: .7rem; line-height: 1; cursor: pointer; }
 .man-btn:hover { border-color: var(--blue); color: var(--blue); }

@@ -21,7 +21,7 @@ function dropin_form_save(array $dirs, int $editPhase, string $self): array {
     $values  = $_POST['value'] ?? [];
     $desired = [];
     foreach ($dirs as $key => $entry) {
-        if (!dropin_editable($entry, $editPhase) || !empty($entry['custom'])) continue;
+        if (!dropin_editable($key, $entry, $editPhase) || !empty($entry['custom'])) continue;
         $state = $states[$key] ?? 'default';
         if (!in_array($state, ['default', 'on', 'off'], true)) $state = 'default';
         $raw = (string) ($values[$key] ?? '');
@@ -45,7 +45,7 @@ function dropin_form_save(array $dirs, int $editPhase, string $self): array {
 
 // Current state for rendering: submitted values on a validation error, else disk.
 function dropin_form_current(string $key, array $entry, array $merged, array $desired, bool $postErr, int $editPhase): array {
-    if ($postErr && dropin_editable($entry, $editPhase) && isset($desired[$key])) {
+    if ($postErr && dropin_editable($key, $entry, $editPhase) && isset($desired[$key])) {
         $d   = $desired[$key];
         $val = is_array($d['value']) ? implode("\n", $d['value']) : (string) $d['value'];
         return ['state' => $d['state'], 'input' => $val];
@@ -59,6 +59,7 @@ function dropin_form_current(string $key, array $entry, array $merged, array $de
 
 // Render the grouped directive cards for $groups (a subset of dnsmasq_groups()).
 function dropin_form_render(array $dirs, array $groups, array $man, array $merged, array $desired, bool $postErr, int $editPhase): void {
+    $floor    = dnsmasq_build_floor();
     $by_group = [];
     foreach ($dirs as $key => $entry) {
         $by_group[$entry['group']][$key] = $entry;
@@ -72,7 +73,8 @@ function dropin_form_render(array $dirs, array $groups, array $man, array $merge
     <div class="dropin-grid">
     <?php foreach ($by_group[$gid] as $key => $entry):
         if (!empty($entry['custom'])) continue;   // rendered by a dedicated widget
-        $editable  = dropin_editable($entry, $editPhase);
+        $editable  = dropin_editable($key, $entry, $editPhase);
+        $blocked   = dnsmasq_directive_blocked($key, $entry, $floor);
         $cur       = dropin_form_current($key, $entry, $merged, $desired, $postErr, $editPhase);
         $state     = $cur['state'];
         $type      = $entry['type'] ?? 'flag';
@@ -103,6 +105,9 @@ function dropin_form_render(array $dirs, array $groups, array $man, array $merge
           <?php if (!empty($entry['locked'])): ?> <span title="<?= h($entry['reason'] ?? '') ?>">🔒</span><?php endif; ?>
         </div>
         <div class="dropin-help"><?= h($entry['help'] ?? '') ?></div>
+        <?php if ($blocked !== null): ?>
+        <div class="dropin-blocked">unavailable: <?= h($blocked) ?></div>
+        <?php endif; ?>
         <?php if (!empty($entry['recommended'])):
             $reclbl = ['on' => 'Enabled', 'off' => 'Disabled', 'default' => 'Default'][$entry['recommended']] ?? ucfirst((string) $entry['recommended']);
         ?>

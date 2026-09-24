@@ -7,6 +7,7 @@ require_once 'inc/auth.php';
 require_once 'inc/layout.php';
 require_once 'inc/cli.php';
 require_once 'inc/hosts_file.php';
+require_once 'inc/dnsmasq_build.php';
 
 require_auth();
 
@@ -27,8 +28,16 @@ foreach ((new HostsFile(HOSTS_DIR . '/local'))->entries() as $e) {
 }
 $port = dropins_merge(DNSMASQ_D)['port'][0] ?? '53';
 
+// Running dnsmasq build per node, as of the last health run. The local node is
+// asked directly so the page is never blank on a cold cache; the health poll
+// refreshes all of them a moment later.
+$builds = dnsmasq_build_cluster();
+$builds[$self] = dnsmasq_build_local();
+
 page_start('Dashboard', __FILE__, 'narrow');
 ?>
+<div class="alert alert-err" id="build-warn" style="display:none"></div>
+
 <div class="grid-2">
 <?php foreach ($nodes as $node):
     $is_local = $node === $self;
@@ -41,6 +50,9 @@ page_start('Dashboard', __FILE__, 'narrow');
     </div>
     <div class="card-body">
       <p id="status-<?= h($node) ?>" class="text-muted" style="font-size:.825rem">Loading…</p>
+      <p class="text-muted" style="font-size:.8rem;margin-top:.4rem">
+        dnsmasq <code id="build-<?= h($node) ?>"><?= h($builds[$node]['version'] ?? '—') ?></code>
+      </p>
       <?php if (!empty($node_ip[$node])): ?>
       <p class="text-muted" style="font-size:.8rem;margin-top:.4rem">
         Listening on <code>127.0.0.1</code> and <code><?= h($node_ip[$node]) ?></code> on port <?= h((string) $port) ?>
@@ -105,6 +117,35 @@ async function run(action, target) {
         dcmHealthPoll();
     }
 }
+
+// Same dnsmasq on every node is a hard requirement: dcm replicates one set of
+// config files to all of them, and an option the older build does not know
+// makes it fail to start on the next restart.
+function showBuild(d) {
+    (d['build-nodes'] || '').split(',').forEach(pair => {
+        const i = pair.lastIndexOf(':');
+        if (i < 1) return;
+        const el = document.getElementById('build-' + pair.slice(0, i));
+        if (el) el.textContent = pair.slice(i + 1) || '—';
+    });
+    const warn = document.getElementById('build-warn');
+    const msg = [];
+    if (d.build === 'mixed') {
+        msg.push('The nodes run different dnsmasq versions (' + d['build-nodes'] + '). '
+               + 'Update every node to ' + d['build-newest'] + ' — the same configuration does not behave the same on all versions.');
+    }
+    if (d['build-features'] === 'mixed') {
+        msg.push('The dnsmasq builds differ in their compile time options, so a directive available on one node can be missing on another.');
+    }
+    if (d['build-unknown']) {
+        msg.push('These configured directives are unknown to the node they are listed with: ' + d['build-unknown']
+               + '. dnsmasq exits at startup on an option it does not know, so that node will not come back after the next restart.');
+    }
+    warn.textContent = msg.join(' ');
+    warn.style.display = msg.length ? '' : 'none';
+}
+document.addEventListener('dcm-health', e => showBuild(e.detail));
+if (window.dcmHealth) showBuild(window.dcmHealth);
 
 NODES.forEach(loadStatus);
 </script>

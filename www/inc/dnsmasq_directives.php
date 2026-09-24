@@ -2,10 +2,14 @@
 // SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Directive schema for the Configuration page. Derived from
-// docs/dnsmasq-directives.md and verified against dnsmasq 2.90 on the cluster.
-// The UI renders its controls from this schema; the drop-in writer serialises
-// the chosen states back into /etc/dnsmasq.d/. This file is data only.
+// Directive schema for the Configuration page, derived from
+// docs/dnsmasq-directives.md. The UI renders its controls from this schema;
+// the drop-in writer serialises the chosen states back into /etc/dnsmasq.d/.
+// This file is data only.
+//
+// The schema is deliberately not tied to a dnsmasq release: which of these
+// directives the running binaries actually accept is resolved at runtime in
+// inc/dnsmasq_build.php, against the whole cluster.
 //
 // Entry shape:
 //   group         group id (see dnsmasq_groups())
@@ -24,6 +28,9 @@
 //   requires      directive ids that must be active for this one to apply
 //   recommended   true to surface as a recommended default
 //   phase         1 = Configuration page now, 2 = Upstream page later
+//   needs         compile-time option the directive depends on (e.g. DNSSEC);
+//                 dnsmasq still lists such options in --help and rejects them
+//                 at startup, so the feature list is what decides
 //   managed       true = a dcm-owned drop-in (e.g. addn-hosts.conf,
 //                 log-facility.conf); shown but not freely editable
 //   locked        true = shown read-only because it is owned elsewhere; the
@@ -287,6 +294,7 @@ function dnsmasq_directives(): array {
             'default' => 'off',
             'on'      => 'dns-loop-detect',
             'off'     => null,
+            'needs'   => 'loop-detect',
         ],
 
         // ── E — DNSSEC ─────────────────────────────────────────────────────
@@ -298,6 +306,7 @@ function dnsmasq_directives(): array {
             'default' => 'off',
             'on'      => 'dnssec',
             'off'     => null,
+            'needs'   => 'DNSSEC',
         ],
         'dnssec-check-unsigned' => [
             'group'   => 'dnssec',
@@ -308,6 +317,7 @@ function dnsmasq_directives(): array {
             'on'      => null,
             'off'     => 'dnssec-check-unsigned=no',
             'requires'=> ['dnssec'],
+            'needs'   => 'DNSSEC',
         ],
 
         // ── F — Upstream & forwarding (Phase 2, Upstream page) ─────────────

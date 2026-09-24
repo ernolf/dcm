@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+require_once __DIR__ . '/dnsmasq_build.php';
+
 // Reads the dnsmasq conf-dir the way dnsmasq itself does: it merges every
 // *.conf drop-in into one effective set of directives. The Configuration page
 // derives each setting's state from this merge, not from filenames, so it
@@ -69,9 +71,15 @@ function dropin_state(string $key, array $entry, array $merged): array {
 
 // Editable on the Configuration page: phase-1 directives that dcm does not
 // own. managed (log-facility) and locked (addn-hosts, interface, port) rows are
-// read-only here; phase-2 (upstream) is edited on the Upstream page.
-function dropin_editable(array $entry, int $phase = 1): bool {
-    return ($entry['phase'] ?? 1) === $phase && empty($entry['locked']) && empty($entry['managed']);
+// read-only here; phase-2 (upstream) is edited on the Upstream page. A
+// directive the cluster's dnsmasq build does not support is read-only too:
+// writing it would break the node that cannot parse it. This is the single
+// gate for rendering, saving and writing, so the three cannot drift apart.
+function dropin_editable(string $key, array $entry, int $phase = 1): bool {
+    if (($entry['phase'] ?? 1) !== $phase || !empty($entry['locked']) || !empty($entry['managed'])) {
+        return false;
+    }
+    return dnsmasq_directive_blocked($key, $entry, dnsmasq_build_floor()) === null;
 }
 
 // Lines to write into <key>.conf for a desired state. Empty array => the file
@@ -157,7 +165,7 @@ function dropins_validate(array $dirs, array $desired): array {
 function dropins_apply(string $dir, array $dirs, array $desired, int $editPhase = 1): array {
     $errors = [];
     foreach ($dirs as $key => $entry) {
-        if (!dropin_editable($entry, $editPhase) || !empty($entry['custom'])) continue;
+        if (!dropin_editable($key, $entry, $editPhase) || !empty($entry['custom'])) continue;
         $d     = $desired[$key] ?? ['state' => 'default', 'value' => null];
         $lines = dropin_lines($entry, $d['state'] ?? 'default', $d['value'] ?? null);
         $name  = $entry['file'] ?? "$key.conf";   // server keeps its established upstream.conf

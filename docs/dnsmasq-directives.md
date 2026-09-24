@@ -9,24 +9,25 @@ This is the canonical catalog of dnsmasq directives that the dcm **Configuration
 
 > **Scope: Phase 1 — DNS resolver / forwarder.** DHCP, DHCPv6, TFTP/PXE boot and ad-blocking lists are deliberately out of scope here; they get their own catalog sections when those features are built.
 
-## Verified build
+## Availability is decided at runtime, not here
 
-Defaults and availability below are verified against the dnsmasq actually deployed on the cluster:
+This catalog is not tied to one dnsmasq release. Which of these directives a cluster can actually use is resolved when the page is rendered: every node reports its version, its compile time options and the long options its binary accepts, and the Configuration page offers only what the *weakest* node in the cluster understands (see `docs/architecture.md`, "Cluster build detection"). A directive outside that floor is shown read-only with the reason, so no configuration is written that the oldest node would refuse to start with.
+
+Two kinds of gate result from that, and they are not the same thing:
+
+- **Unknown option** — the binary does not accept it at all. Taken from `dnsmasq --help`.
+- **Missing compile time feature** — the option is accepted on the command line but the build has no support behind it (a `no-nftset` build still lists `--nftset`). Directives that depend on one carry a `needs` key in the schema, e.g. `DNSSEC`.
+
+The defaults documented below were verified against this build:
 
 ```
-Dnsmasq version 2.90
+Dnsmasq version 2.91
 Compile time options: IPv6 GNU-getopt DBus no-UBus i18n IDN2 DHCP DHCPv6
-no-Lua TFTP conntrack ipset no-nftset auth cryptohash DNSSEC loop-detect
+no-Lua TFTP conntrack ipset no-nftset auth DNSSEC loop-detect
 inotify dumpfile
 ```
 
-Consequences for the catalog:
-
-- **Available and relevant:** DNSSEC, DHCP/DHCPv6, TFTP, `ipset`, conntrack, authoritative mode, loop detection, inotify, IDN2.
-- **Not available:** Lua scripting (`no-Lua`), UBus (`no-UBus`), **nftset** (`no-nftset`) — so `nftset=` is unusable on this build; use `ipset=` if set integration is ever needed.
-- `filter-AAAA` / `filter-A` are core options, not gated by a compile flag, so they work.
-
-When the build changes, re-verify with `dnsmasq --version` and update this section.
+It is the reference for the *behaviour* described in the tables, not a statement about what dcm supports. Adding a directive here that older releases do not know needs no version table: it is gated automatically.
 
 ## The three-state model
 
@@ -67,9 +68,10 @@ For a plain default-off flag, states 1 and 3 collapse: "off" simply means the di
 | `expand-hosts` | flag | off | `expand-hosts` | removed | sensible with `domain=` | — |
 | `domain` | value | none | `domain=<dom>[,<subnet>]` | removed | — | — |
 | `local` | list | none | `local=/dom/` | removed | — | — |
+| `address` | list | none | `address=/dom/<ip>` | removed | hosts entries win per name; since 2.86 other query types need `local=` too | own page, `address.conf` |
 | `filterwin2k` | flag | off | `filterwin2k` | removed | — | — |
-| `filter-AAAA` | flag | off | `filter-AAAA` | removed | — | core feature, available |
-| `filter-A` | flag | off | `filter-A` | removed | — | available since 2.86 |
+| `filter-AAAA` | flag | off | `filter-AAAA` | removed | — | not gated by a compile option |
+| `filter-A` | flag | off | `filter-A` | removed | — | 2.86 and newer; read-only on older builds |
 | `no-hosts` | flag | **/etc/hosts is read (on)** | removed | `no-hosts` | — | true three-state |
 | `localise-queries` | flag | off | `localise-queries` | removed | — | — |
 
@@ -91,14 +93,14 @@ For a plain default-off flag, states 1 and 3 collapse: "off" simply means the di
 | `stop-dns-rebind` | flag | off | `stop-dns-rebind` | removed | — | — |
 | `rebind-localhost-ok` | flag | off | `rebind-localhost-ok` | removed | sensible with `stop-dns-rebind` | — |
 | `rebind-domain-ok` | list | none | `rebind-domain-ok=/dom/` | removed | requires `stop-dns-rebind` | — |
-| `dns-loop-detect` | flag | off | `dns-loop-detect` | removed | — | build supports it |
+| `dns-loop-detect` | flag | off | `dns-loop-detect` | removed | — | `needs` loop-detect |
 
 ## E — DNSSEC
 
 | Directive | Type | Default | Enable | Disable | Conflicts / Requires | dcm |
 |---|---|---|---|---|---|---|
-| `dnssec` | flag | off | `dnssec` | removed | **requires** trust anchors; upstream must pass the DO bit | see `encrypted-upstream-dns.md` |
-| `dnssec-check-unsigned` | flag | **on (2.90)** | removed | `dnssec-check-unsigned=no` | only with `dnssec` | true three-state |
+| `dnssec` | flag | off | `dnssec` | removed | **requires** trust anchors; upstream must pass the DO bit | `needs` DNSSEC; see `encrypted-upstream-dns.md` |
+| `dnssec-check-unsigned` | flag | **on (since 2.80)** | removed | `dnssec-check-unsigned=no` | only with `dnssec` | `needs` DNSSEC; true three-state |
 
 ## F — Upstream / forwarding (Phase 2 — Upstream page)
 
@@ -129,11 +131,10 @@ These belong on the Upstream page, not the Configuration page. Listed here for c
 
 ## Deferred (future catalog sections)
 
-The build supports these, but the corresponding dcm features are not implemented yet:
+dnsmasq offers these, but the corresponding dcm features are not implemented yet. Each depends on a compile time feature, so each entry names the one its directives would have to declare as `needs`:
 
-- **DHCP / DHCPv6** — `dhcp-range`, `dhcp-host`, `dhcp-option`, … (build: DHCP, DHCPv6).
-- **TFTP / PXE boot** — `enable-tftp`, `tftp-root`, `dhcp-boot`, … (build: TFTP).
+- **DHCP / DHCPv6** — `dhcp-range`, `dhcp-host`, `dhcp-option`, … (needs DHCP, DHCPv6).
+- **TFTP / PXE boot** — `enable-tftp`, `tftp-root`, `dhcp-boot`, … (needs TFTP).
 - **Ad-block lists** — separate from the `block` hosts file; still planned.
-- **Authoritative zones** — `auth-zone`, `auth-server`, … (build: auth).
-
-`nftset=` is **not** available on this build (`no-nftset`); `ipset=` is.
+- **Authoritative zones** — `auth-zone`, `auth-server`, … (needs auth).
+- **Set integration** — `ipset=` (needs ipset) and `nftset=` (needs nftset); distributions differ in which of the two they compile in, so both would be offered and gated.

@@ -11,9 +11,10 @@ conf_value() {
 }
 
 # == Config ==
-# Only these two paths are dcm's own; everything else is read from dnsmasq itself.
+# Only these paths are dcm's own; everything else is read from dnsmasq itself.
 NODES_FILE="/etc/dcm/nodes"
 DEFAULT_FILE="/etc/default/dnsmasq"
+BUILD_CACHE="/var/lib/dcm/cluster-build"
 
 # Derive all dnsmasq paths from dnsmasq's own config (single source of truth).
 # dnsmasq merges the conf-file with every snippet in the conf-dir, so dcm reads
@@ -48,8 +49,33 @@ LOG_FILE="${LOG_FILE:-/var/log/dnsmasq/dnsmasq.log}"
 unset _f _sources
 
 SELF=$(hostname -s)
+DNSMASQ_BIN=$(command -v dnsmasq || echo /usr/sbin/dnsmasq)
 
 # ----------------------------------------
+
+# The running build of this node, as "version=" / "features=" / "options="
+# lines. All three matter to the cluster, because dnsmasq aborts at startup on
+# a directive its build does not know — a config written for a newer or richer
+# build takes the other node down on its next restart. The option list comes
+# from the binary itself (--help), so dcm needs no table of what exists in
+# which release. LC_ALL=C because both outputs are translated otherwise.
+build_local() {
+    LC_ALL=C "${DNSMASQ_BIN}" --version 2>/dev/null | awk '
+        tolower($0) ~ /^dnsmasq version/ { print "version=" $3 }
+        /^Compile time options:/ { sub(/^[^:]*:[[:space:]]*/, ""); print "features=" $0 }'
+    echo "options=$(build_options)"
+}
+
+# Every long option this build accepts, taken from its own --help. Note that
+# --help still lists options whose compile-time feature is missing, so the
+# feature list above stays the second half of the answer.
+build_options() {
+    LC_ALL=C "${DNSMASQ_BIN}" --help 2>/dev/null | awk '
+        /^(-[^,]*, )?[[:space:]]*--[a-zA-Z0-9-]+/ {
+            match($0, /--[a-zA-Z0-9-]+/)
+            print substr($0, RSTART + 2, RLENGTH - 2)
+        }' | sort -u | paste -sd' ' -
+}
 
 read_nodes() {
     grep -v '^\s*#' "${NODES_FILE}" | grep -v '^\s*$'
@@ -105,9 +131,9 @@ Usage: $(basename "$0") <command>
   tail-f  local|remote     Stream log in real time (tail -F)
   stats   local|remote [all|today|1h|24h|7d]
                            Output log analytics as key=value / TSV
-  health                   Report live sync/restart state as key=value (web UI)
+  health                   Report live sync/restart/build state as key=value (web UI)
   diff                     List what a sync would change on each remote node
-  restart-needed           Print 'needed' or 'ok' for this node (used by health)
+  node-report              Print this node's restart state and build (used by health)
 EOF
 }
 
@@ -354,28 +380,90 @@ restart_needed_local() {
     if (( ${newest%.*} > start )); then return 0; else return 1; fi
 }
 
+# Everything health needs from a single node, in one round trip:
+#   restart=needed|ok   version=<v>   features=<compile options>   options=<long options>
+cmd_node_report() {
+    if restart_needed_local; then echo "restart=needed"; else echo "restart=ok"; fi
+    build_local
+}
+
+# Remember each node's build, so the web UI can gate its directive list on what
+# every node is able to do without an SSH round trip per page view. Records of
+# nodes that were unreachable this time are carried over from the previous
+# cache: a node that is down must not silently widen what the UI offers.
+# $@ holds one "<node>TAB<version>TAB<features>TAB<options>" record per node.
+write_build_cache() {
+    local tmp
+    mkdir -p "$(dirname "${BUILD_CACHE}")"
+    tmp="${BUILD_CACHE}.$$"
+    # No cache yet is the normal first run: the group must not end on a failed
+    # command, or `set -o pipefail` fails the whole pipeline and `set -e` takes
+    # health down before it has printed a single line.
+    { printf '%s\n' "$@"; cat "${BUILD_CACHE}" 2>/dev/null || :; } \
+        | awk -F'\t' 'NR == FNR { member[$0] = 1; next }
+                      NF >= 2 && ($1 in member) && !seen[$1]++' <(read_nodes) - > "${tmp}"
+    chmod 644 "${tmp}"
+    mv "${tmp}" "${BUILD_CACHE}"
+}
+
+# Directive keys currently configured, read from the merged drop-ins — what
+# every node's dnsmasq has to understand once this config reaches it.
+configured_keys() {
+    sed -n 's/^[[:space:]]*\([a-z0-9-]\{1,\}\).*/\1/p' "${DNSMASQ_D}"/*.conf 2>/dev/null | sort -u
+}
+
 # Live cluster health for the web UI's notifications. Machine-readable:
 #   sync=ok|stale       sync-nodes=<comma-separated remotes that differ>
 #   restart=ok|needed   restart-nodes=<comma-separated nodes to restart>
+#   build=ok|mixed      build-nodes=<node:version,...>
+#   build-newest=<highest version in the cluster>
+#   build-features=ok|mixed
+#   build-unknown=<node:directive,...>  configured but unknown to that node's
+#                                       dnsmasq, which would then refuse to start
 # Unreachable nodes are skipped — the Dashboard's status dot covers liveness.
 cmd_health() {
-    local node sync_stale=() restart_nodes=()
+    local node report version features options key conf_keys
+    local sync_stale=() restart_nodes=() records=() versions=() featsets=() unknown=()
 
-    restart_needed_local && restart_nodes+=("${SELF}")
+    conf_keys=$(configured_keys)
 
     while IFS= read -r node; do
-        node_up "${node}" || continue
-        node_in_sync "${node}" || sync_stale+=("${node}")
-        if ssh -o ConnectTimeout=4 -o BatchMode=yes "root@${node}" \
-               /usr/local/sbin/dcm-cli restart-needed 2>/dev/null | grep -q '^needed$'; then
-            restart_nodes+=("${node}")
+        if [[ "${node}" == "${SELF}" ]]; then
+            report=$(cmd_node_report)
+        else
+            node_up "${node}" || continue
+            node_in_sync "${node}" || sync_stale+=("${node}")
+            report=$(ssh -o ConnectTimeout=4 -o BatchMode=yes "root@${node}" \
+                         /usr/local/sbin/dcm-cli node-report 2>/dev/null) || continue
         fi
-    done < <(remote_nodes)
+        version=$(sed -n 's/^version=//p' <<< "${report}")
+        features=$(sed -n 's/^features=//p' <<< "${report}")
+        options=$(sed -n 's/^options=//p' <<< "${report}")
+        if grep -q '^restart=needed$' <<< "${report}"; then restart_nodes+=("${node}"); fi
+        records+=("$(printf '%s\t%s\t%s\t%s' "${node}" "${version}" "${features}" "${options}")")
+        versions+=("${node}:${version}")
+        featsets+=("${features}")
+        # An option this node's build does not know aborts its dnsmasq at
+        # startup, so it fails on the next restart after a sync, not while the
+        # setting is being saved.
+        [[ -z "${options}" ]] && continue
+        while IFS= read -r key; do
+            unknown+=("${node}:${key}")
+        done < <(awk -v opts="${options}" 'BEGIN { split(opts, a, " "); for (i in a) known[a[i]] = 1 }
+                                           NF && !($0 in known)' <<< "${conf_keys}")
+    done < <(read_nodes)
+
+    write_build_cache "${records[@]}"
 
     echo "sync=$([[ ${#sync_stale[@]} -gt 0 ]] && echo stale || echo ok)"
     echo "sync-nodes=$(join_csv "${sync_stale[@]}")"
     echo "restart=$([[ ${#restart_nodes[@]} -gt 0 ]] && echo needed || echo ok)"
     echo "restart-nodes=$(join_csv "${restart_nodes[@]}")"
+    echo "build=$([[ $(printf '%s\n' "${versions[@]#*:}" | sort -u | wc -l) -gt 1 ]] && echo mixed || echo ok)"
+    echo "build-nodes=$(join_csv "${versions[@]}")"
+    echo "build-newest=$(printf '%s\n' "${versions[@]#*:}" | sort -V | tail -1)"
+    echo "build-features=$([[ $(printf '%s\n' "${featsets[@]}" | sort -u | wc -l) -gt 1 ]] && echo mixed || echo ok)"
+    echo "build-unknown=$(join_csv "${unknown[@]}")"
 }
 
 # Human-readable list of what a sync would change on each remote node — the
@@ -438,8 +526,8 @@ case "${1:-}" in
     diff)
         cmd_diff
         ;;
-    restart-needed)
-        restart_needed_local && echo needed || echo ok
+    node-report)
+        cmd_node_report
         ;;
     *)
         usage; exit 1

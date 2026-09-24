@@ -220,11 +220,22 @@ document.addEventListener('click', () => document.getElementById('bell-panel').c
         const m = [];
         if (d.sync === 'stale') {
             const n = d['sync-nodes'] ? ' (' + d['sync-nodes'] + ')' : '';
-            m.push({id: 'sync', text: 'Configuration differs from another node' + n + ' — run Sync on the Dashboard.'});
+            m.push({id: 'sync', text: 'Another node is out of sync' + n + ' — run Sync on the Dashboard.'});
         }
         if (d.restart === 'needed') {
             const n = d['restart-nodes'] ? ' (' + d['restart-nodes'] + ')' : '';
             m.push({id: 'restart', text: 'Settings changed' + n + ' — restart dnsmasq on the Dashboard.'});
+        }
+        // One config is replicated to every node, so the nodes have to agree on
+        // what they can do with it — a version or feature gap is a real fault.
+        if (d.build === 'mixed') {
+            m.push({id: 'build', text: 'dnsmasq versions differ (' + (d['build-nodes'] || '') + ') — update every node to ' + (d['build-newest'] || 'the same version') + '.'});
+        }
+        if (d['build-features'] === 'mixed') {
+            m.push({id: 'build-features', text: 'The dnsmasq builds differ in their compile time options — the same configuration will not behave the same on every node.'});
+        }
+        if (d['build-unknown']) {
+            m.push({id: 'build-unknown', text: 'Configured directives that a node does not know (' + d['build-unknown'] + ') — its dnsmasq will not start after the next sync.'});
         }
         return m;
     }
@@ -251,6 +262,9 @@ document.addEventListener('click', () => document.getElementById('bell-panel').c
             });
             d = await r.json();
         } catch (e) { return; }
+        // The Dashboard reads the same poll instead of running its own.
+        window.dcmHealth = d;
+        document.dispatchEvent(new CustomEvent('dcm-health', {detail: d}));
         const m = messages(d);
         render(m);
 
