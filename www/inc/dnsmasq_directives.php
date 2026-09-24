@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Directive schema for the Configuration page, derived from
-// docs/dnsmasq-directives.md. The UI renders its controls from this schema;
+// Directive schema for the Configuration page, derived from the directive
+// catalog in the project wiki. The UI renders its controls from this schema;
 // the drop-in writer serialises the chosen states back into /etc/dnsmasq.d/.
 // This file is data only.
 //
