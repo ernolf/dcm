@@ -6,7 +6,7 @@ require_once 'inc/config.php';
 require_once 'inc/auth.php';
 require_once 'inc/layout.php';
 require_once 'inc/dnsmasq_directives.php';
-require_once 'inc/dnsmasq_manpage.php';
+require_once 'inc/manpage.php';
 require_once 'inc/dropins.php';
 require_once 'inc/dropin_form.php';
 require_once 'inc/directive_file.php';
