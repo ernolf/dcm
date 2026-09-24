@@ -50,7 +50,9 @@ function page_start(string $title, string $current, string $width = ''): void {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= h($title) ?> — dns-admin</title>
-<link rel="stylesheet" href="assets/style.css">
+<!-- The mtime busts the browser cache: markup and stylesheet change together,
+     and a stale stylesheet renders the new markup unstyled. -->
+<link rel="stylesheet" href="assets/style.css?v=<?= h((string) @filemtime(__DIR__ . '/../assets/style.css')) ?>">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 <script>
 (function() {
