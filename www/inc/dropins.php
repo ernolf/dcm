@@ -176,7 +176,8 @@ function dropins_apply(string $dir, array $dirs, array $desired, int $editPhase 
                 $errors[] = sprintf('could not remove %s', $name);
             }
         } else {
-            if (!@write_if_changed($file, implode("\n", $lines) . "\n")) {
+            $body = implode("\n", array_map('dnsmasq_format', $lines)) . "\n";
+            if (!@write_if_changed($file, $body)) {
                 $errors[] = sprintf('could not write %s', $name);
             }
         }

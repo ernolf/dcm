@@ -52,3 +52,14 @@ function write_if_changed(string $path, string $content): bool {
     if (is_file($path) && file_get_contents($path) === $content) return true;
     return file_put_contents($path, $content) !== false;
 }
+
+// Single source of the drop-in writing style. dnsmasq accepts "key=value" and
+// "key = value" alike; everything dcm writes uses the spaced form, so the
+// generated drop-ins read the same as the hand-written ones. A bare flag has
+// no "=" and is left as it is.
+function dnsmasq_format(string $line): string {
+    $pos = strpos($line, '=');
+    return $pos === false
+        ? $line
+        : rtrim(substr($line, 0, $pos)) . ' = ' . ltrim(substr($line, $pos + 1));
+}

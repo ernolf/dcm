@@ -47,13 +47,13 @@ class DirectiveFile {
 
     /** Appends an entry and returns its line index, so the caller can jump to it. */
     public function add(string $value): int {
-        $this->lines[] = $this->key . ' = ' . $value;
+        $this->lines[] = dnsmasq_format($this->key . '=' . $value);
         return array_key_last($this->lines);
     }
 
     public function update(int $idx, string $value): void {
         $was_disabled = str_starts_with(trim($this->lines[$idx]), '#');
-        $new = $this->key . ' = ' . $value;
+        $new = dnsmasq_format($this->key . '=' . $value);
         $this->lines[$idx] = $was_disabled ? '# ' . $new : $new;
     }
 
