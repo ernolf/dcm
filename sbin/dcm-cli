@@ -395,6 +395,10 @@ cmd_node_report() {
 write_build_cache() {
     local tmp
     mkdir -p "$(dirname "${BUILD_CACHE}")"
+    # The replace below is atomic, so a temporary that is still around minutes
+    # later belongs to a run that was killed between writing and renaming it.
+    # The age guard keeps a concurrent run's file out of reach.
+    find "$(dirname "${BUILD_CACHE}")" -maxdepth 1 -name "$(basename "${BUILD_CACHE}").*" -mmin +5 -delete 2>/dev/null || :
     tmp="${BUILD_CACHE}.$$"
     # No cache yet is the normal first run: the group must not end on a failed
     # command, or `set -o pipefail` fails the whole pipeline and `set -e` takes
