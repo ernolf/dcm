@@ -38,6 +38,7 @@ define('DNSMASQ_CONF',  $_dconf);
 define('DNSMASQ_D',     $_ddir);
 define('HOSTS_DIR',     $_hosts);
 define('UPSTREAM_CONF', DNSMASQ_D . '/upstream.conf');
+define('ADDRESS_CONF',  DNSMASQ_D . '/address.conf');
 define('NODES_FILE',    '/etc/dcm/nodes');
 define('CLI',           '/usr/local/sbin/dcm-cli');
 define('LOG_FILE',      $_log);

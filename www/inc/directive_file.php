@@ -2,21 +2,25 @@
 // SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Edits the server= lines in upstream.conf the same way HostsFile edits a hosts
-// file: each server entry can be toggled (commented/uncommented), edited, added
-// or deleted. Non-server lines (plain comments) are preserved untouched.
-class UpstreamFile {
+// Edits the lines of one repeatable directive in its drop-in the same way
+// HostsFile edits a hosts file: each entry can be toggled (commented/
+// uncommented), edited, added or deleted. Lines of other directives and plain
+// comments are preserved untouched, so a hand-written header survives.
+class DirectiveFile {
     private array  $lines;
     private string $path;
+    private string $key;
 
-    public function __construct(string $path) {
+    public function __construct(string $path, string $key) {
         $this->path  = $path;
+        $this->key   = $key;
         $this->lines = is_file($path) ? (file($path, FILE_IGNORE_NEW_LINES) ?: []) : [];
     }
 
-    /** All server= entries with their line index, enabled flag and spec value. */
+    /** All entries of this directive with their line index, enabled flag and value. */
     public function entries(): array {
-        $result = [];
+        $pattern = '/^' . preg_quote($this->key, '/') . '\s*=\s*(.+)$/';
+        $result  = [];
         foreach ($this->lines as $idx => $line) {
             $t       = trim($line);
             $enabled = true;
@@ -24,7 +28,7 @@ class UpstreamFile {
                 $enabled = false;
                 $t       = ltrim(substr($t, 1));
             }
-            if (!preg_match('/^server\s*=\s*(.+)$/', $t, $m)) continue;
+            if (!preg_match($pattern, $t, $m)) continue;
             $result[] = ['idx' => $idx, 'enabled' => $enabled, 'value' => trim($m[1])];
         }
         return $result;
@@ -43,13 +47,13 @@ class UpstreamFile {
 
     /** Appends an entry and returns its line index, so the caller can jump to it. */
     public function add(string $value): int {
-        $this->lines[] = 'server = ' . $value;
+        $this->lines[] = $this->key . ' = ' . $value;
         return array_key_last($this->lines);
     }
 
     public function update(int $idx, string $value): void {
         $was_disabled = str_starts_with(trim($this->lines[$idx]), '#');
-        $new = 'server = ' . $value;
+        $new = $this->key . ' = ' . $value;
         $this->lines[$idx] = $was_disabled ? '# ' . $new : $new;
     }
 

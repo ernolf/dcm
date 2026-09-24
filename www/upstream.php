@@ -9,7 +9,7 @@ require_once 'inc/dnsmasq_directives.php';
 require_once 'inc/dnsmasq_manpage.php';
 require_once 'inc/dropins.php';
 require_once 'inc/dropin_form.php';
-require_once 'inc/upstream_file.php';
+require_once 'inc/directive_file.php';
 
 require_auth();
 
@@ -21,7 +21,7 @@ $groups = array_filter(dnsmasq_groups(), fn($g) => ($g['phase'] ?? 1) === 2);
 // --- Server table actions (hosts-style, on upstream.conf) ---
 $tmsg = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['srv_action'])) {
-    $file   = new UpstreamFile(UPSTREAM_CONF);
+    $file   = new DirectiveFile(UPSTREAM_CONF, 'server');
     $action = $_POST['srv_action'];
     $value  = trim(str_replace(["\r", "\n"], '', $_POST['value'] ?? ''));
     // Anchor to jump back to, so acting on a row does not scroll the page away.
@@ -53,7 +53,7 @@ $merged  = dropins_merge(DNSMASQ_D);
 $postErr = $msg && $msg[0] === 'err';
 
 $edit    = isset($_GET['edit']) ? (int) $_GET['edit'] : -1;
-$entries = (new UpstreamFile(UPSTREAM_CONF))->entries();
+$entries = (new DirectiveFile(UPSTREAM_CONF, 'server'))->entries();
 
 page_start('Upstream DNS', __FILE__, 'narrow');
 if ($msg)  alert($msg[0],  $msg[1]);

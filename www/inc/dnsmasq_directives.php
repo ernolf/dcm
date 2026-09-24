@@ -131,6 +131,16 @@ function dnsmasq_directives(): array {
             'on'      => 'local=%s',
             'off'     => null,
         ],
+        'address' => [
+            'group'   => 'name',
+            'label'   => 'Fixed addresses',
+            'type'    => 'list',
+            'help'    => 'Domains answered from a fixed address, e.g. /example.com/192.168.1.2; pair with local= to stop other query types being forwarded.',
+            'default' => 'none',
+            'on'      => 'address=%s',
+            'off'     => null,
+            'custom'  => true,              // edited via the dedicated address table, not the grid
+        ],
         'filterwin2k' => [
             'group'   => 'name',
             'label'   => 'Filter Windows SRV/SOA noise',

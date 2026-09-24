@@ -30,6 +30,7 @@ function render_nav(): array {
         ['file' => 'vms.php',        'label' => 'Virtual Machines',   'icon' => '⬡'],
         ['file' => 'block.php',      'label' => 'Block List',         'icon' => '⊘'],
         ['file' => 'upstream.php',   'label' => 'Upstream DNS',       'icon' => '↑'],
+        ['file' => 'address.php',    'label' => 'Fixed Addresses',    'icon' => '⌖'],
         ['file' => 'live.php',       'label' => 'Live Log',           'icon' => '▶'],
         ['file' => 'analytics.php',  'label' => 'Analytics',          'icon' => '≡'],
     ];
