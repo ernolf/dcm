@@ -41,8 +41,10 @@ class UpstreamFile {
         unset($this->lines[$idx]);
     }
 
-    public function add(string $value): void {
+    /** Appends an entry and returns its line index, so the caller can jump to it. */
+    public function add(string $value): int {
         $this->lines[] = 'server = ' . $value;
+        return array_key_last($this->lines);
     }
 
     public function update(int $idx, string $value): void {

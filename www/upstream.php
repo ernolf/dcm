@@ -24,21 +24,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['srv_action'])) {
     $file   = new UpstreamFile(UPSTREAM_CONF);
     $action = $_POST['srv_action'];
     $value  = trim(str_replace(["\r", "\n"], '', $_POST['value'] ?? ''));
+    // Anchor to jump back to, so acting on a row does not scroll the page away.
+    $anchor = '#servers';
 
     if ($action === 'toggle') {
         $file->toggle((int) $_POST['idx']);
         $file->save();
+        $anchor = '#row-' . (int) $_POST['idx'];
     } elseif ($action === 'delete') {
         $file->delete((int) $_POST['idx']);
         $file->save();
     } elseif ($action === 'add') {
         if ($value === '') $tmsg = ['err', 'Server spec required.'];
-        else { $file->add($value); $file->save(); }
+        else { $anchor = '#row-' . $file->add($value); $file->save(); }
     } elseif ($action === 'update') {
         if ($value === '') $tmsg = ['err', 'Server spec required.'];
-        else { $file->update((int) $_POST['idx'], $value); $file->save(); }
+        else { $file->update((int) $_POST['idx'], $value); $file->save(); $anchor = '#row-' . (int) $_POST['idx']; }
     }
-    if (!$tmsg) { header('Location: upstream.php?saved=1'); exit; }
+    if (!$tmsg) { header('Location: upstream.php?saved=1' . $anchor); exit; }
 }
 
 // --- Schema form (the other upstream directives) ---
@@ -70,7 +73,7 @@ if ($tmsg) alert($tmsg[0], $tmsg[1]);
 </div>
 </form>
 
-<div class="card">
+<div class="card" id="servers">
   <div class="card-header">
     Upstream servers
     <span class="text-muted" style="font-weight:400;margin-left:auto;font-size:.75rem"><?= UPSTREAM_CONF ?></span>
@@ -84,7 +87,7 @@ if ($tmsg) alert($tmsg[0], $tmsg[1]);
     <?php foreach ($entries as $e):
         $is_edit = $edit === $e['idx'];
     ?>
-    <tr class="<?= $e['enabled'] ? '' : 'row-disabled' ?>">
+    <tr id="row-<?= $e['idx'] ?>" class="<?= $e['enabled'] ? '' : 'row-disabled' ?>">
       <?php if ($is_edit): ?>
       <td>
         <form method="post" style="display:flex;gap:.5rem;align-items:center">
@@ -92,7 +95,7 @@ if ($tmsg) alert($tmsg[0], $tmsg[1]);
           <input type="hidden" name="idx"        value="<?= $e['idx'] ?>">
           <input type="text" class="inp-hosts" name="value" value="<?= h($e['value']) ?>" style="min-width:280px">
           <button class="btn btn-primary btn-sm">Save</button>
-          <a href="upstream.php" class="btn btn-secondary btn-sm">Cancel</a>
+          <a href="upstream.php#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Cancel</a>
         </form>
       </td>
       <td></td><td></td>
@@ -101,7 +104,7 @@ if ($tmsg) alert($tmsg[0], $tmsg[1]);
       <td><?= $e['enabled'] ? '<span style="color:var(--green)">active</span>' : '<span class="text-muted">disabled</span>' ?></td>
       <td>
         <div class="td-actions">
-          <a href="?edit=<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+          <a href="?edit=<?= $e['idx'] ?>#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
           <form method="post" style="display:inline">
             <input type="hidden" name="srv_action" value="toggle">
             <input type="hidden" name="idx"        value="<?= $e['idx'] ?>">

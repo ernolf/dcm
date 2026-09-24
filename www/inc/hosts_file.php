@@ -49,8 +49,10 @@ class HostsFile {
         unset($this->lines[$idx]);
     }
 
-    public function add(string $ip, array $hostnames): void {
+    /** Appends an entry and returns its line index, so the caller can jump to it. */
+    public function add(string $ip, array $hostnames): int {
         $this->lines[] = $ip . "\t" . implode(' ', $hostnames);
+        return array_key_last($this->lines);
     }
 
     public function update(int $idx, string $ip, array $hostnames): void {

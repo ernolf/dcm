@@ -15,16 +15,17 @@ $edit = isset($_GET['edit']) ? (int)$_GET['edit'] : -1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+    // Anchor to jump back to, so acting on a row does not scroll the page away.
+    $anchor = '#hosts';
 
     if ($action === 'toggle') {
         $file->toggle((int)$_POST['idx']);
         $file->save();
-        $msg = ['ok', 'Entry toggled.'];
+        $anchor = '#row-' . (int)$_POST['idx'];
 
     } elseif ($action === 'delete') {
         $file->delete((int)$_POST['idx']);
         $file->save();
-        $msg = ['ok', 'Entry deleted.'];
 
     } elseif ($action === 'add') {
         $ip    = trim($_POST['ip'] ?? '');
@@ -34,9 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (empty($hosts)) {
             $msg = ['err', 'At least one hostname required.'];
         } else {
-            $file->add($ip, $hosts);
+            $anchor = '#row-' . $file->add($ip, $hosts);
             $file->save();
-            $msg = ['ok', 'Entry added.'];
         }
 
     } elseif ($action === 'update') {
@@ -47,12 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $file->update((int)$_POST['idx'], $ip, $hosts);
             $file->save();
-            $msg = ['ok', 'Entry updated.'];
+            $anchor = '#row-' . (int)$_POST['idx'];
         }
     }
 
-    if (!$msg || $msg[0] === 'ok') {
-        header('Location: hosts.php' . ($msg ? '?saved=1' : ''));
+    if (!$msg) {
+        header('Location: hosts.php?saved=1' . $anchor);
         exit;
     }
 }
@@ -62,7 +62,7 @@ $entries = $file->entries();
 page_start('Hosts', __FILE__, 'narrow');
 if ($msg) alert($msg[0], $msg[1]);
 ?>
-<div class="card">
+<div class="card" id="hosts">
   <div class="card-header">
     Local Hosts
     <span class="text-muted" style="font-weight:400;margin-left:auto;font-size:.75rem"><?= HOSTS_DIR . '/local' ?></span>
@@ -73,7 +73,7 @@ if ($msg) alert($msg[0], $msg[1]);
     <?php foreach ($entries as $e):
         $is_edit = $edit === $e['idx'];
     ?>
-    <tr class="<?= $e['enabled'] ? '' : 'row-disabled' ?>">
+    <tr id="row-<?= $e['idx'] ?>" class="<?= $e['enabled'] ? '' : 'row-disabled' ?>">
       <?php if ($is_edit): ?>
       <td colspan="2">
         <form method="post" style="display:flex;gap:.5rem;align-items:center">
@@ -82,7 +82,7 @@ if ($msg) alert($msg[0], $msg[1]);
           <input type="text" class="inp-ip"    name="ip"        value="<?= h($e['ip']) ?>">
           <input type="text" class="inp-hosts" name="hostnames" value="<?= h(implode(' ', $e['hostnames'])) ?>">
           <button class="btn btn-primary btn-sm">Save</button>
-          <a href="hosts.php" class="btn btn-secondary btn-sm">Cancel</a>
+          <a href="hosts.php#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Cancel</a>
         </form>
       </td>
       <td></td><td></td>
@@ -92,7 +92,7 @@ if ($msg) alert($msg[0], $msg[1]);
       <td><?= $e['enabled'] ? '<span style="color:var(--green)">active</span>' : '<span class="text-muted">disabled</span>' ?></td>
       <td>
         <div class="td-actions">
-          <a href="?edit=<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+          <a href="?edit=<?= $e['idx'] ?>#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
           <form method="post" style="display:inline">
             <input type="hidden" name="action" value="toggle">
             <input type="hidden" name="idx"    value="<?= $e['idx'] ?>">

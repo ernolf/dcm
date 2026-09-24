@@ -273,14 +273,15 @@ document.addEventListener('click', () => document.getElementById('bell-panel').c
 
 // Confirm a save with a transient toast instead of a sticky banner; the bell
 // then carries the follow-up (sync/restart) as a live state. Drop the 'saved'
-// query afterwards so a manual refresh does not toast again.
+// query afterwards so a manual refresh does not toast again, but keep the
+// fragment — the editable pages use it to return to the row that was acted on.
 (function () {
     const sp = new URLSearchParams(location.search);
     if (!sp.has('saved')) return;
     dcmToast('Saved.');
     sp.delete('saved');
     const q = sp.toString();
-    history.replaceState({}, '', location.pathname + (q ? '?' + q : ''));
+    history.replaceState({}, '', location.pathname + (q ? '?' + q : '') + location.hash);
 })();
 </script>
 <?php

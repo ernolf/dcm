@@ -16,9 +16,13 @@ $edit = isset($_GET['edit']) ? (int)$_GET['edit'] : -1;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
+    // Anchor to jump back to, so acting on a row does not scroll the page away.
+    $anchor = '#vms';
+
     if ($action === 'toggle') {
         $file->toggle((int)$_POST['idx']);
         $file->save();
+        $anchor = '#row-' . (int)$_POST['idx'];
     } elseif ($action === 'delete') {
         $file->delete((int)$_POST['idx']);
         $file->save();
@@ -28,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!filter_var($ip, FILTER_VALIDATE_IP) || empty($hosts)) {
             $msg = ['err', 'Invalid IP or hostname.'];
         } else {
-            $file->add($ip, $hosts);
+            $anchor = '#row-' . $file->add($ip, $hosts);
             $file->save();
         }
     } elseif ($action === 'update') {
@@ -39,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $file->update((int)$_POST['idx'], $ip, $hosts);
             $file->save();
+            $anchor = '#row-' . (int)$_POST['idx'];
         }
     } elseif ($action === 'relocate') {
         $new_prefix = trim($_POST['new_prefix'] ?? '');
@@ -63,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$msg || $msg[0] === 'ok') {
-        header('Location: vms.php' . ($msg ? '?saved=1' : ''));
+        header('Location: vms.php?saved=1' . $anchor);
         exit;
     }
 }
@@ -101,7 +106,7 @@ if ($msg) alert($msg[0], $msg[1]);
   </div>
 </div>
 
-<div class="card">
+<div class="card" id="vms">
   <div class="card-header">
     VM Entries
     <span class="text-muted" style="font-weight:400;margin-left:auto;font-size:.75rem"><?= HOSTS_DIR . '/vms' ?></span>
@@ -112,7 +117,7 @@ if ($msg) alert($msg[0], $msg[1]);
     <?php foreach ($entries as $e):
         $is_edit = $edit === $e['idx'];
     ?>
-    <tr class="<?= $e['enabled'] ? '' : 'row-disabled' ?>">
+    <tr id="row-<?= $e['idx'] ?>" class="<?= $e['enabled'] ? '' : 'row-disabled' ?>">
       <?php if ($is_edit): ?>
       <td colspan="2">
         <form method="post" style="display:flex;gap:.5rem;align-items:center">
@@ -121,7 +126,7 @@ if ($msg) alert($msg[0], $msg[1]);
           <input type="text" class="inp-ip"    name="ip"        value="<?= h($e['ip']) ?>">
           <input type="text" class="inp-hosts" name="hostnames" value="<?= h(implode(' ', $e['hostnames'])) ?>">
           <button class="btn btn-primary btn-sm">Save</button>
-          <a href="vms.php" class="btn btn-secondary btn-sm">Cancel</a>
+          <a href="vms.php#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Cancel</a>
         </form>
       </td>
       <td></td><td></td>
@@ -131,7 +136,7 @@ if ($msg) alert($msg[0], $msg[1]);
       <td><?= $e['enabled'] ? '<span style="color:var(--green)">active</span>' : '<span class="text-muted">disabled</span>' ?></td>
       <td>
         <div class="td-actions">
-          <a href="?edit=<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+          <a href="?edit=<?= $e['idx'] ?>#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
           <form method="post" style="display:inline">
             <input type="hidden" name="action" value="toggle">
             <input type="hidden" name="idx"    value="<?= $e['idx'] ?>">
