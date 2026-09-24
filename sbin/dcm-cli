@@ -101,7 +101,7 @@ validate_nodes() {
     if [[ ! -d "${HOSTS_DIR}" ]]; then
         cat >&2 <<EOF
 Error: 'addn-hosts' resolves to '${HOSTS_DIR}', which is not a directory.
-dcm keeps its host files (local, vms, block) in a directory, not a single file.
+dcm keeps its host files (local, vms, isolated) in a directory, not a single file.
 Point 'addn-hosts' at a directory in a snippet under ${DNSMASQ_D}, e.g.:  addn-hosts = ${DNSMASQ_D}/hosts
 EOF
         return 1

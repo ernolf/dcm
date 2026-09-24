@@ -97,7 +97,7 @@ echo 'nameserver 127.0.0.1' > /etc/resolv.conf
 
 - You could: `bind-interfaces` / `bind-dynamic` makes dnsmasq bind `127.0.0.1` and the LAN IP individually instead of the default wildcard `0.0.0.0:53`, so it no longer collides with the stub on `127.0.0.53:53`. But running both resolvers at once is messy and fragile:
 
-  - **Two sources of truth.** Anything that still reaches `127.0.0.53` — apps using the NSS `resolve` module, or a `resolv.conf` that got repointed — bypasses dnsmasq entirely. Your `hosts` / `block` / split-horizon rules and dnsmasq's query log do not apply, so dcm's live log and analytics silently miss those lookups.
+  - **Two sources of truth.** Anything that still reaches `127.0.0.53` — apps using the NSS `resolve` module, or a `resolv.conf` that got repointed — bypasses dnsmasq entirely. Your `hosts` / `isolated` / split-horizon rules and dnsmasq's query log do not apply, so dcm's live log and analytics silently miss those lookups.
   - **resolv.conf churn.** `systemd-resolved` (together with NetworkManager / netplan) may rewrite `/etc/resolv.conf` back to `127.0.0.53` on a network change or reboot, switching the box off dnsmasq without warning.
   - **More moving parts.** `bind-interfaces` only binds interfaces that exist at startup; addresses that appear later (DHCP, VPN tunnels) need `bind-dynamic`. The default wildcard bind avoids that — but the wildcard is exactly what collides with the stub.
 
@@ -130,13 +130,13 @@ printf 'log-facility = /var/log/dnsmasq/dnsmasq.log\n' > /etc/dnsmasq.d/log-faci
 Create the hosts directory and its three files:
 ```sh
 mkdir -p /etc/dnsmasq.d/hosts
-touch /etc/dnsmasq.d/hosts/{local,vms,block}
+touch /etc/dnsmasq.d/hosts/{local,vms,isolated}
 ```
 
 These are ordinary dnsmasq hosts files (loaded via `addn-hosts`), each managed by its own UI page:
 - **`local`** — your LAN hosts, including one entry per cluster node (required — see below).
 - **`vms`** — virtual-machine records, with one-click subnet relocation in the UI. *(Interim solution: a future version will drop manual relocation and auto-detect the network, so a VM is always reachable by name no matter which connected network it is started in.)*
-- **`block`** — software *phone-home* endpoints (e.g. the license-check servers of Acronis, Adobe, …) pinned to `127.0.0.1` so those lookups fail silently. This is **not** an ad-blocking list; ad-list blocking is a separate, still-planned feature.
+- **`isolated`** — software *phone-home* endpoints (e.g. the license-check servers of Acronis, Adobe, …) pinned to `127.0.0.1` so those lookups fail silently. This is **not** an ad-blocking list; ad-list blocking is a separate, still-planned feature.
 
 `hosts/local` must contain one line per node mapping its hostname to its IP — `dcm-cli` reads these to generate each node's `listen.conf`:
 ```
@@ -216,7 +216,7 @@ chown root:www-data /etc/dnsmasq.d && chmod 2775 /etc/dnsmasq.d
 chown www-data:www-data /etc/dnsmasq.d/*.conf
 chown www-data:www-data /etc/dnsmasq.d/hosts/local /etc/dnsmasq.d/hosts/vms
 # generated per node / read-only in the UI by design -> stay root-owned
-chown root:root /etc/dnsmasq.d/listen.conf /etc/dnsmasq.d/hosts/block
+chown root:root /etc/dnsmasq.d/listen.conf /etc/dnsmasq.d/hosts/isolated
 ```
 (`www-data` already runs `dcm-cli` as root via `sudo`, so making the drop-in directory group-writable is not an additional exposure.)
 
@@ -309,7 +309,7 @@ sudo dcm-cli restart all
 | `/etc/dnsmasq.d` | `root:www-data` `2775` | drop-in dir; UI creates/removes `<directive>.conf` here |
 | `/etc/dnsmasq.d/*.conf` | www-data | per-directive drop-ins + `upstream.conf`, edited in the UI |
 | `/etc/dnsmasq.d/hosts/{local,vms}` | www-data | host records, edited in the UI |
-| `/etc/dnsmasq.d/hosts/block` | root | phone-home endpoints → `127.0.0.1`, read-only in the UI |
+| `/etc/dnsmasq.d/hosts/isolated` | root | phone-home endpoints → `127.0.0.1`, read-only in the UI |
 | `/etc/dnsmasq.d/listen.conf` | root | per-node, generated, never synced |
 
 ## CLI usage

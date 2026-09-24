@@ -87,7 +87,7 @@ There is no monolithic config file — `--conf-file=/dev/null` makes dnsmasq rea
 | `address.conf` | Yes | All `address =` directives (Fixed Addresses page) |
 | `hosts/local` | Yes | LAN hosts, swarm nodes, Fritzboxen |
 | `hosts/vms` | Yes | VM entries — IPs change per connected network |
-| `hosts/block` | Yes | Phone-home domains → 127.0.0.1 (Acronis, Adobe, Piriform) |
+| `hosts/isolated` | Yes | Phone-home domains → 127.0.0.1 (Acronis, Adobe, Piriform) |
 
 ### DNS query routing logic
 
@@ -101,9 +101,9 @@ flowchart TD
     Cache -->|Yes| CacheReply["Return from cache"]
     Cache -->|No| Hosts{"In hosts/local\nor hosts/vms?"}
     Hosts -->|Yes| LocalReply["Return configured IP"]
-    Hosts -->|No| Block{"In hosts/block?"}
-    Block -->|Yes| Blocked["Return 127.0.0.1 — silent drop"]
-    Block -->|No| Domain{"Domain-specific upstream?"}
+    Hosts -->|No| Isolated{"In hosts/isolated?"}
+    Isolated -->|Yes| Quarantined["Return 127.0.0.1 — silent drop"]
+    Isolated -->|No| Domain{"Domain-specific upstream?"}
     Domain -->|"Google, YouTube etc."| Google["8.8.8.8 / 8.8.4.4"]
     Domain -->|"Reverse DNS 192.168.188-189.x"| Fritz["Fritzbox 192.168.188.1"]
     Domain -->|"All other"| Default["Default upstream\n(systemd-resolved)"]
@@ -200,7 +200,7 @@ The sidebar order matches this table.
 | Configuration | `dnsconf.php` | Per-directive drop-in editor — schema-driven switches/selects with dnsmasq manual help |
 | Hosts | `hosts.php` | Edit `hosts/local` — add/remove/enable/disable entries |
 | Virtual Machines | `vms.php` | Edit `hosts/vms` + one-click subnet relocation |
-| Block List | `block.php` | View `hosts/block` grouped by redirect IP |
+| Isolated Hosts | `isolated.php` | View `hosts/isolated` grouped by redirect IP |
 | Upstream DNS | `upstream.php` | Per-directive editor for the upstream group (no-resolv, resolv-file, server, …); servers go to `upstream.conf` |
 | Fixed Addresses | `address.php` | Edit `address.conf` — domains answered from one fixed address instead of being forwarded |
 | Live Log | `live.php` | Real-time SSE log viewer, two panels (local + remote), color-coded, layout toggle, dark mode |
@@ -308,6 +308,6 @@ VMs in `hosts/vms` keep a fixed last octet across all networks. When the laptop 
 
 - **Auth**: `inc/auth.php` is a stub — always passes. Add HTTP Basic Auth or session login when external access is needed.
 - **Compressed logs**: `.log.2.gz` and older not yet analyzed — add `zcat` support for longer time ranges.
-- **Block list**: read-only in UI. Editing requires `hosts/block` to be owned by `www-data`.
+- **Isolated hosts**: read-only in UI. Editing requires `hosts/isolated` to be owned by `www-data`.
 - **Notification history (phase 2)**: the bell reflects live state only; persist faults/events (unreachable node, lost upstream, with timestamps) in SQLite, fed by a periodic background check.
 - **Theming**: a Skin/Style page to pick light/dark palettes and custom accent colours, built on the existing CSS variables and stored in SQLite.

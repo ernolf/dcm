@@ -135,6 +135,6 @@ dnsmasq offers these, but the corresponding dcm features are not implemented yet
 
 - **DHCP / DHCPv6** — `dhcp-range`, `dhcp-host`, `dhcp-option`, … (needs DHCP, DHCPv6).
 - **TFTP / PXE boot** — `enable-tftp`, `tftp-root`, `dhcp-boot`, … (needs TFTP).
-- **Ad-block lists** — separate from the `block` hosts file; still planned.
+- **Ad-block lists** — separate from the `isolated` hosts file; still planned.
 - **Authoritative zones** — `auth-zone`, `auth-server`, … (needs auth).
 - **Set integration** — `ipset=` (needs ipset) and `nftset=` (needs nftset); distributions differ in which of the two they compile in, so both would be offered and gated.

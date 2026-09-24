@@ -9,7 +9,7 @@ require_once 'inc/hosts_file.php';
 
 require_auth();
 
-$file    = new HostsFile(HOSTS_DIR . '/block');
+$file    = new HostsFile(HOSTS_DIR . '/isolated');
 $entries = $file->entries();
 
 // Group by IP for display
@@ -18,12 +18,12 @@ foreach ($entries as $e) {
     $by_ip[$e['ip']][] = $e;
 }
 
-page_start('Block List', __FILE__, 'narrow');
+page_start('Isolated Hosts', __FILE__, 'narrow');
 ?>
 <div class="card">
   <div class="card-header">
-    Blocked Domains
-    <span class="text-muted" style="font-weight:400;margin-left:auto;font-size:.75rem"><?= HOSTS_DIR . '/block' ?> — read-only</span>
+    Isolated Hosts
+    <span class="text-muted" style="font-weight:400;margin-left:auto;font-size:.75rem"><?= HOSTS_DIR . '/isolated' ?> — read-only</span>
   </div>
   <div class="table-wrap">
   <table>
@@ -43,7 +43,7 @@ page_start('Block List', __FILE__, 'narrow');
   </div>
   <div class="card-footer text-muted" style="font-size:.8rem">
     <?= count($entries) ?> entries total.
-    To edit this file, modify <?= HOSTS_DIR ?>/block directly.
+    To edit this file, modify <?= HOSTS_DIR ?>/isolated directly.
   </div>
 </div>
 <?php page_end(); ?>

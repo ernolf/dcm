@@ -28,7 +28,7 @@ function render_nav(): array {
         ['file' => 'dnsconf.php',    'label' => 'Configuration',      'icon' => '⚙'],
         ['file' => 'hosts.php',      'label' => 'Hosts',              'icon' => '⊞'],
         ['file' => 'vms.php',        'label' => 'Virtual Machines',   'icon' => '⬡'],
-        ['file' => 'block.php',      'label' => 'Block List',         'icon' => '⊘'],
+        ['file' => 'isolated.php',   'label' => 'Isolated Hosts',     'icon' => '⊘'],
         ['file' => 'upstream.php',   'label' => 'Upstream DNS',       'icon' => '↑'],
         ['file' => 'address.php',    'label' => 'Fixed Addresses',    'icon' => '⌖'],
         ['file' => 'live.php',       'label' => 'Live Log',           'icon' => '▶'],
