@@ -338,13 +338,15 @@ node_in_sync() {
     return 0
 }
 
-# 0 = a restart is needed (a drop-in is newer than dnsmasq's start time), 1 = ok.
+# 0 = a restart is needed (a drop-in or hosts file is newer than dnsmasq's start
+# time), 1 = ok. The hosts files count: dnsmasq reads addn-hosts at start only,
+# so an edited host name is not live until the restart either.
 # listen.conf is excluded: it is regenerated on every sync, so its mtime would
 # otherwise raise a permanent false alarm.
 restart_needed_local() {
     local newest start
-    newest=$(find "${DNSMASQ_D}" -maxdepth 1 -name '*.conf' ! -name 'listen.conf' \
-                  -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+    newest=$( { find "${DNSMASQ_D}" -maxdepth 1 -type f -name '*.conf' ! -name 'listen.conf' -printf '%T@\n'
+                find "${HOSTS_DIR}" -maxdepth 1 -type f -printf '%T@\n'; } 2>/dev/null | sort -rn | head -1)
     [[ -z "${newest}" ]] && return 1
     start=$(date -d "$(systemctl show dnsmasq -p ActiveEnterTimestamp --value 2>/dev/null)" \
                  +%s 2>/dev/null || echo 0)
