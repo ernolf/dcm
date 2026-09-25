@@ -145,7 +145,9 @@ ensure_listen_conf() {
         printf 'listen-address = 127.0.0.1\nlisten-address = %s\n' "${ip}" \
             > "${DNSMASQ_D}/listen.conf"
     else
-        ssh "root@${node}" \
+        # The command is assembled here on purpose: ${ip} is a local lookup.
+        # shellcheck disable=SC2029
+        ssh -n "root@${node}" \
             "printf 'listen-address = 127.0.0.1\nlisten-address = %s\n' '${ip}' \
              > ${DNSMASQ_D}/listen.conf"
     fi
@@ -167,7 +169,9 @@ cmd_sync() {
         rsync -a --delete --exclude='listen.conf' "${DNSMASQ_D}/" "root@${node}:${DNSMASQ_D}/"
         echo "  ${DNSMASQ_D}/ (listen.conf excluded)"
 
-        ssh "root@${node}" "mkdir -p $(dirname "${NODES_FILE}")"
+        # ${NODES_FILE} is the same path on every node, so dirname resolves here.
+        # shellcheck disable=SC2029
+        ssh -n "root@${node}" "mkdir -p $(dirname "${NODES_FILE}")"
         rsync -a "${NODES_FILE}" "root@${node}:${NODES_FILE}"
         echo "  ${NODES_FILE}"
 
@@ -190,7 +194,7 @@ cmd_restart_local() {
 cmd_restart_remote() {
     while IFS= read -r node; do
         echo "Restarting dnsmasq on ${node} ..."
-        ssh "root@${node}" systemctl restart dnsmasq
+        ssh -n "root@${node}" systemctl restart dnsmasq
         echo "Done."
     done < <(remote_nodes)
 }
@@ -203,7 +207,7 @@ cmd_status_local() {
 cmd_status_remote() {
     while IFS= read -r node; do
         echo "=== ${node} ==="
-        ssh "root@${node}" systemctl status dnsmasq --no-pager || true
+        ssh -n "root@${node}" systemctl status dnsmasq --no-pager || true
     done < <(remote_nodes)
 }
 
@@ -232,6 +236,8 @@ cmd_stats() {
     if [[ "${node}" == "remote" ]]; then
         local rnode
         rnode=$(remote_nodes | head -1)
+        # ${period} is expanded here on purpose, the remote node gets a literal.
+        # shellcheck disable=SC2029
         ssh "root@${rnode}" "/usr/local/sbin/dcm-cli stats local ${period}"
         return
     fi
@@ -343,7 +349,7 @@ join_csv() { local IFS=,; echo "$*"; }
 
 # Reachability probe for a remote node — fast, never prompts.
 node_up() {
-    ssh -o ConnectTimeout=4 -o BatchMode=yes "root@$1" true 2>/dev/null
+    ssh -n -o ConnectTimeout=4 -o BatchMode=yes "root@$1" true 2>/dev/null
 }
 
 # Does the content differ from ${node}? 0 = in sync, 1 = differs. Uses rsync's
@@ -437,7 +443,7 @@ cmd_health() {
         else
             node_up "${node}" || continue
             node_in_sync "${node}" || sync_stale+=("${node}")
-            report=$(ssh -o ConnectTimeout=4 -o BatchMode=yes "root@${node}" \
+            report=$(ssh -n -o ConnectTimeout=4 -o BatchMode=yes "root@${node}" \
                          /usr/local/sbin/dcm-cli node-report 2>/dev/null) || continue
         fi
         version=$(sed -n 's/^version=//p' <<< "${report}")
