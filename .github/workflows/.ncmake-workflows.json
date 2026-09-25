@@ -9,6 +9,16 @@
     "sha": "0a5957bffde5b7b2e4d33f6dae5f75c982ee93e6",
     "source": "ncmake"
   },
+  "lint-php-syntax.yml": {
+    "hash": "8d37c406206c6882d67128d6690ddeab8d35179ed90ae06bc17c4fdf4f00d3a2",
+    "sha": "f49863acd5230f4aa0b72ce2b2a4f15c84f1a9f2",
+    "source": "ncmake"
+  },
+  "lint-shell.yml": {
+    "hash": "31e2abb3be0ff42a89b048b66c5cb4af678a679c35499462f442f792b1cdda1c",
+    "sha": "7b49f77d8f23bf578d085a198ce12abd97d3e5f0",
+    "source": "ncmake"
+  },
   "reuse.yml": {
     "hash": "7507fa539b8cdec70a5de786fbac4e38f1e53f9df404dbfc75bb2fe7950bc010",
     "sha": "67fdafc440e24937ece9f2f16d7f2c2df2c7efa5",
