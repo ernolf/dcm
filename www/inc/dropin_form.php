@@ -89,7 +89,7 @@ function dropin_form_render(array $dirs, array $groups, array $man, array $merge
         $useSwitch = $editable && $entry['on'] !== null && ($entry['off'] ?? null) === null;
         $showValue = $hasValue || !empty($entry['optval']);
     ?>
-      <div class="dropin-item<?= !$editable && $isDefault ? ' is-default' : '' ?>">
+      <div class="dropin-item<?= !$editable && $isDefault ? ' is-default' : '' ?>" id="dir-<?= h($key) ?>">
         <div class="dropin-head">
           <?php if (!$editable): ?>
             <span class="dropin-badge" style="color:<?= $badge ?>"><?= h($state) ?></span>
