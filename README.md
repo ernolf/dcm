@@ -6,9 +6,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 <!-- Project header -->
 <p>
   <img src="www/assets/logo.svg" alt="dcm — dnsmasq cluster manager" width="290" align="left">
-  <h3>Web frontend + CLI for a two-node dnsmasq cluster</p>
+  <h3>Web frontend + CLI for a two-node dnsmasq cluster</h3>
 </p>
 <p>
+  <a href="https://api.reuse.software/info/github.com/ernolf/dcm"><img alt="REUSE status" src="https://api.reuse.software/badge/github.com/ernolf/dcm"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
   <img alt="PHP" src="https://img.shields.io/badge/PHP-777BB4">
   <img alt="Bash" src="https://img.shields.io/badge/shell-bash-4EAA25">
