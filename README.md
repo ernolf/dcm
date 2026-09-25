@@ -42,9 +42,10 @@ Run two or more dnsmasq nodes as one resolver and manage them from a single plac
 
 ## Quick start
 
-1. On **every** node: free port 53 (`DNSStubListener=no` in `/etc/systemd/resolved.conf`) and point `/etc/resolv.conf` at `127.0.0.1`.
-2. On the **UI** node: point dnsmasq at the drop-in directory only, install `sbin/dcm-cli` to `/usr/local/sbin/`, list every node in `/etc/dcm/nodes`, allow `www-data` to call the binary through `sudo`, and deploy `www/` to the document root.
-3. `sudo dcm-cli sync` then `sudo dcm-cli restart all` — the launch config, the drop-ins, the host files, the node list and the binary land on every other node.
+1. On the **UI** node, get the source: `git clone https://github.com/ernolf/dcm.git && cd dcm`, or unpack an archive of the same tree. The paths in step 3 are relative to that directory; there is no build step.
+2. On **every** node: free port 53 (`DNSStubListener=no` in `/etc/systemd/resolved.conf`) and point `/etc/resolv.conf` at `127.0.0.1`.
+3. On the **UI** node: point dnsmasq at the drop-in directory only, install `sbin/dcm-cli` to `/usr/local/sbin/`, list every node in `/etc/dcm/nodes`, allow `www-data` to call the binary through `sudo`, and deploy `www/` to the document root.
+4. `sudo dcm-cli sync` then `sudo dcm-cli restart all` — the launch config, the drop-ins, the host files, the node list and the binary land on every other node.
 
 Full walkthrough, including the PHP-FPM override and the file ownership: **[Installation](https://github.com/ernolf/dcm/wiki/Installation)**.
 
