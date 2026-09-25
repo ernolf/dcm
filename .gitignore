@@ -11,3 +11,6 @@ Thumbs.db
 
 # Local runtime state (never belongs in the repo)
 *.log
+
+# Build artifacts: the ncmake workflow module and 'make reuse' write into build/cache.
+/build/
