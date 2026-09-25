@@ -15,6 +15,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
   <img alt="Bash" src="https://img.shields.io/badge/shell-bash-4EAA25">
 </p>
 <hr>
+<br clear="left">
 
 # dcm — dnsmasq cluster manager
 
