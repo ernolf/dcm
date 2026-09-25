@@ -6,8 +6,25 @@ require_once 'inc/config.php';
 require_once 'inc/auth.php';
 require_once 'inc/layout.php';
 require_once 'inc/directive_file.php';
+require_once 'inc/dropins.php';
 
 require_auth();
+
+// Domains of a dnsmasq domain spec: "/a.com/b.com/1.2.3.4" -> ["a.com","b.com"].
+// An address= spec ends in the address literal, a local= spec does not.
+function spec_domains(string $spec, bool $has_literal): array {
+    $parts = array_values(array_filter(array_map('trim', explode('/', $spec)), fn($p) => $p !== ''));
+    if ($has_literal) array_pop($parts);
+    return array_map(fn($d) => strtolower(rtrim($d, '.')), $parts);
+}
+
+// Is $dom claimed by a local= domain, either exactly or as one of its children?
+function domain_is_local(string $dom, array $local): bool {
+    foreach ($local as $l) {
+        if ($dom === $l || str_ends_with($dom, '.' . $l)) return true;
+    }
+    return false;
+}
 
 $msg = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['addr_action'])) {
@@ -37,6 +54,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['addr_action'])) {
 $edit    = isset($_GET['edit']) ? (int) $_GET['edit'] : -1;
 $entries = (new DirectiveFile(ADDRESS_CONF, 'address'))->entries();
 
+// Since dnsmasq 2.86 an address= answers only the query type of its own address
+// literal, so every other type for that domain goes upstream unless a local=
+// claims the domain. Collect the enabled domains that no local= covers.
+$local_domains = [];
+foreach (dropins_merge(DNSMASQ_D)['local'] ?? [] as $spec) {
+    foreach (spec_domains($spec, false) as $d) $local_domains[] = $d;
+}
+$unpaired = [];
+foreach ($entries as $i => $e) {
+    $entries[$i]['unpaired'] = [];
+    if (!$e['enabled']) continue;
+    foreach (spec_domains($e['value'], true) as $d) {
+        // The catch-all has no sensible local= counterpart.
+        if ($d === '#' || domain_is_local($d, $local_domains)) continue;
+        $entries[$i]['unpaired'][] = $d;
+        $unpaired[$d] = true;
+    }
+}
+
 page_start('Fixed Addresses', __FILE__, 'narrow');
 if ($msg) alert($msg[0], $msg[1]);
 ?>
@@ -52,6 +88,14 @@ if ($msg) alert($msg[0], $msg[1]);
     address literal is answered — every other type is still forwarded, so pair this with
     <em>Authoritative local domains</em> (<code>local=</code>) to keep AAAA, HTTPS and MX at home.
   </p>
+  <?php if ($unpaired): ?>
+  <div class="alert alert-warn" style="display:block;margin:.6rem 1.25rem 0">
+    No <code>local=</code> covers
+    <?= implode(', ', array_map(fn($d) => '<code>' . h($d) . '</code>', array_keys($unpaired))) ?>.
+    Every query type other than the address literal is forwarded upstream for these domains.
+    Claim them under <a href="dnsconf.php#dir-local">Authoritative local domains</a>.
+  </div>
+  <?php endif; ?>
   <div class="table-wrap">
   <table>
     <tr><th>Address</th><th>Status</th><th>Actions</th></tr>
@@ -72,7 +116,9 @@ if ($msg) alert($msg[0], $msg[1]);
       <td></td><td></td>
       <?php else: ?>
       <td class="ip-cell"><?= h($e['value']) ?></td>
-      <td><?= $e['enabled'] ? '<span style="color:var(--green)">active</span>' : '<span class="text-muted">disabled</span>' ?></td>
+      <td><?php if (!$e['enabled']): ?><span class="text-muted">disabled</span><?php
+          elseif ($e['unpaired']): ?><span style="color:var(--orange)" title="No local= for <?= h(implode(', ', $e['unpaired'])) ?>">active, no local=</span><?php
+          else: ?><span style="color:var(--green)">active</span><?php endif; ?></td>
       <td>
         <div class="td-actions">
           <a href="?edit=<?= $e['idx'] ?>#row-<?= $e['idx'] ?>" class="btn btn-secondary btn-sm">Edit</a>
