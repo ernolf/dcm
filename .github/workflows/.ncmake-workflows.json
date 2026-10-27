@@ -9,6 +9,11 @@
     "sha": "0a5957bffde5b7b2e4d33f6dae5f75c982ee93e6",
     "source": "ncmake"
   },
+  "lint-actions-security.yml": {
+    "hash": "946a1c4508050dcdcafce853b06352d3b3849860bb1970f9c192305c8046daf1",
+    "sha": "68d667016bbca1a53754fc86c678156f373519e4",
+    "source": "ncmake"
+  },
   "lint-php-syntax.yml": {
     "hash": "8d37c406206c6882d67128d6690ddeab8d35179ed90ae06bc17c4fdf4f00d3a2",
     "sha": "f49863acd5230f4aa0b72ce2b2a4f15c84f1a9f2",
