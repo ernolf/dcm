@@ -15,7 +15,9 @@
 #
 #   1. the repository variable PHP_VERSIONS  (gh variable set PHP_VERSIONS -b "8.2 8.4")
 #   2. a .php-version file in the repository
-#   3. PHP_VERSIONS_DEFAULT below
+#   3. in a Nextcloud app, the PHP range its servers run on, as make
+#      lint-php-syntax and make php-compat of ncmake derive it
+#   4. PHP_VERSIONS_DEFAULT below
 #
 # so the installed file stays byte-identical in every repository: the lock hash
 # in .github/workflows/.ncmake-workflows.json keeps matching and the workflow
@@ -40,7 +42,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Oldest and newest version to check when the repository states nothing.
+  # Oldest and newest version to check when a repository that is no app
+  # states nothing.
   PHP_VERSIONS_DEFAULT: "8.2 8.4"
 
 jobs:
@@ -64,23 +67,78 @@ jobs:
           if [ -z "$versions" ] && [ -f .php-version ]; then
             versions="$(cat .php-version)"
           fi
-          if [ -z "$versions" ]; then
-            versions="$PHP_VERSIONS_DEFAULT"
-          fi
           # python3 builds the JSON array: assembling it in the shell would
           # need unquoted word splitting, which shellcheck rightly flags. It
-          # also falls back to the default once more, so a file or a variable
-          # that holds only separators cannot produce an empty matrix - that
-          # would fail the whole run with "does not contain any values".
+          # also falls back to the default when the variable and the file are
+          # absent or hold only separators, so the matrix cannot be empty -
+          # that would fail the whole run with "does not contain any values".
           python3 - "$versions" "$PHP_VERSIONS_DEFAULT" <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import os
           import re
           import sys
+          import urllib.request
+          import xml.etree.ElementTree as ET
+
+          SERVER = 'https://raw.githubusercontent.com/nextcloud/server'
+          SCHEDULE = 'https://raw.githubusercontent.com/wiki/nextcloud/server/Maintenance-and-Release-Schedule.md'
+          # The newest end-of-life major when the schedule cannot be read.
+          EOL_FALLBACK = '32'
 
           def split(value):
               return [v for v in re.split(r'[,;\s]+', value.strip()) if v]
 
-          found = split(sys.argv[1]) or split(sys.argv[2])
+          def fetch(url):
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as r:
+                      return r.read().decode('utf-8')
+              except OSError:
+                  return None
+
+          def info(path, attr):
+              e = ET.parse('appinfo/info.xml').getroot().find(path)
+              v = (e.get(attr) or '').strip() if e is not None else ''
+              return v if re.fullmatch(r'[0-9.]+', v) else ''
+
+          def major(v):
+              return v.split('.')[0] if v else ''
+
+          def minor(v):
+              p = v.split('.')
+              return f'{p[0]}.{p[1] if len(p) > 1 else 0}'
+
+          # A server states the PHP it refuses in its lib/versioncheck.php, read
+          # from its stable branch, or from master for a major without one.
+          def versioncheck(nc, pattern, shift):
+              text = fetch(f'{SERVER}/stable{nc}/lib/versioncheck.php')
+              if text is None:
+                  text = fetch(f'{SERVER}/master/lib/versioncheck.php') or ''
+              m = re.search(pattern, text)
+              if not m:
+                  return ''
+              n = int(m.group(1)) - shift
+              return f'{n // 10000}.{n % 10000 // 100}'
+
+          def key(v):
+              return [int(x) for x in v.split('.')]
+
+          # The floor is the declared PHP floor or the one of the oldest declared
+          # server, never below the floor of the newest end-of-life major; the
+          # ceiling is the newest PHP minor the highest declared server runs on.
+          def app_range():
+              if not os.path.isfile('appinfo/info.xml'):
+                  return []
+              declared = info('dependencies/php', 'min-version')
+              app = minor(declared) if declared else versioncheck(major(info('dependencies/nextcloud', 'min-version')), r'PHP_VERSION_ID < ([0-9]+)', 0)
+              schedule = (fetch(SCHEDULE) or '').split('## EOL Versions', 1)
+              eol = re.search(r'^\| \*\*([0-9]*)\*\*', schedule[1], re.M) if len(schedule) > 1 else None
+              floors = [v for v in (app, versioncheck(eol.group(1) if eol else EOL_FALLBACK, r'PHP_VERSION_ID < ([0-9]+)', 0)) if v]
+              if not floors:
+                  sys.exit('No PHP floor: neither appinfo/info.xml nor lib/versioncheck.php of the declared and the end-of-life server gave one')
+              ceiling = versioncheck(major(info('dependencies/nextcloud', 'max-version')), r'PHP_VERSION_ID >= ([0-9]+)', 100)
+              return sorted({max(floors, key=key), *([ceiling] if ceiling else [])}, key=key)
+
+          found = split(sys.argv[1]) or app_range() or split(sys.argv[2])
           print('matrix=' + json.dumps(found))
           PY
           grep '^matrix=' "$GITHUB_OUTPUT" | tail -n 1
@@ -113,12 +171,18 @@ jobs:
       - name: Lint
         run: |
           # php -l takes one file per call, so xargs runs it per file; a
-          # repository without PHP files passes instead of failing.
+          # repository without PHP files passes instead of failing. It runs
+          # without a memory limit, as only the parser runs: a large generated
+          # file exhausts the 128M of the development ini, and php stops on it
+          # without having checked it. php -l exits with 255 on a file it cannot
+          # parse, and xargs stops at a command that exits with 255, so a call
+          # that fails exits with 1: xargs goes on to the next file and the step
+          # still fails at the end.
           if [ -z "$(git ls-files '*.php' '*.phtml')" ]; then
             echo "No PHP files in this repository; nothing to check."
             exit 0
           fi
-          git ls-files -z '*.php' '*.phtml' | xargs -0 -r -n 1 -P 4 php -l
+          git ls-files -z '*.php' '*.phtml' | xargs -0 -r -n 1 -P 4 sh -c "php -d memory_limit=-1 -l \"\$1\" || exit 1" php-lint
 
   summary:
     name: php-lint-summary
