@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 [ernolf] Raphael Gradenwitz <raphael.gradenwitz@googlemail.com>
 # SPDX-License-Identifier: MIT
 #
-# Generic shell linter: shellcheck over every tracked shell script.
+# Generic shell linter: shellcheck and the rules of ncmake over every tracked
+# shell script.
 # https://github.com/ernolf/ncmake
 #
 # There is no shellcheck template in nextcloud/.github, so this is ncmake's own.
@@ -9,8 +10,20 @@
 # list comes from git and a file qualifies by extension (*.sh, *.bash) or by its
 # shebang, which is what covers an extensionless command such as sbin/dcm-cli.
 #
-# A repository with no shell script at all passes instead of failing, so the
-# workflow can be installed anywhere without becoming a permanent red cross.
+# The job runs make lint-shell of the ncmake lint module, the same target a
+# maintainer runs locally, so both give the same result: the files it collects,
+# the shellcheck version and the rules that fail live in that module only.
+# Beside shellcheck, which reads the repository's .shellcheckrc, the target
+# applies the rule unset-local: in a script under set -u, every name local or
+# declare declares gets a value, so no path that reads it first aborts with
+# "unbound variable". The ncmake bootstrap is fetched into the runner's temp
+# directory, so the repository needs none of its own. Only the step that fetches
+# the ncmake modules sees a token.
+#
+# Every finding fails the job. A repository with no shell script at all passes
+# instead of failing, so the workflow can be installed anywhere without becoming
+# a permanent red cross. The job keeps the name shellcheck, which a branch
+# protection names as its required check. The report goes to the job summary.
 
 name: Lint shell
 
@@ -26,6 +39,9 @@ concurrency:
   group: lint-shell-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  NCMAKE_BOOTSTRAP: https://raw.githubusercontent.com/ernolf/ncmake/main/bootstrap/GNUmakefile
+
 jobs:
   shellcheck:
     name: shellcheck
@@ -36,47 +52,30 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Collect shell scripts
-        id: collect
+      - name: Fetch ncmake
+        env:
+          # make dev-init lists the ncmake modules through the GitHub API, which
+          # answers an anonymous call from a shared hosted runner with 403 every
+          # so often.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          list="$RUNNER_TEMP/shell-files"
-          : > "$list"
-          # Tracked files only: a checkout carries nothing else worth linting,
-          # and git handles names with spaces through the NUL separator.
-          while IFS= read -r -d '' f; do
-            test -f "$f" || continue
-            case "$f" in
-              *.sh | *.bash)
-                printf '%s\n' "$f" >> "$list"
-                continue
-                ;;
-            esac
-            # Everything else qualifies by shebang. Reading the first two bytes
-            # first keeps binaries out of the pattern match.
-            test "$(head -c 2 "$f")" = '#!' || continue
-            if head -n 1 "$f" | grep -Eq '^#!.*\b(ba|da|k)?sh\b'; then
-              printf '%s\n' "$f" >> "$list"
-            fi
-          done < <(git ls-files -z)
-          count="$(wc -l < "$list")"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Shell scripts found: $count"
-          cat "$list"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/ncmake-bootstrap.mk" "$NCMAKE_BOOTSTRAP"
+          make -f "$RUNNER_TEMP/ncmake-bootstrap.mk" --no-print-directory dev-init
 
-      - name: Install shellcheck if the image does not ship it
-        if: steps.collect.outputs.count != '0'
+      - name: Run make lint-shell
         run: |
-          command -v shellcheck >/dev/null && exit 0
-          sudo apt-get -qq update
-          sudo apt-get -qq install -y shellcheck
-
-      - name: Run shellcheck
-        if: steps.collect.outputs.count != '0'
-        run: |
-          # -x follows sourced files, which is what a repository with a shared
-          # library of functions needs; -d '\n' keeps names with spaces intact.
-          xargs -r -d '\n' -a "$RUNNER_TEMP/shell-files" shellcheck --color=always -x
-
-      - name: Nothing to check
-        if: steps.collect.outputs.count == '0'
-        run: echo "No shell scripts in this repository; nothing to check."
+          out="$RUNNER_TEMP/lint-shell.txt"
+          rc=0
+          make -f "$RUNNER_TEMP/ncmake-bootstrap.mk" --no-print-directory lint-shell > "$out" || rc=$?
+          cat "$out"
+          {
+            echo '## lint-shell'
+            echo
+            echo '```text'
+            cat "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if test "$rc" != 0; then
+            echo "::error::make lint-shell failed: a finding of shellcheck or of unset-local, or a run that could not be carried out."
+            exit 1
+          fi
