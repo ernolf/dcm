@@ -30,7 +30,7 @@ DNSMASQ_D="${CONFIG_DIR%%,*}"                              # CONFIG_DIR, minus ,
 # Last uncommented "key = value" across all given files wins.
 conf_value_multi() {
     local key="$1"; shift
-    local f v out=""
+    local f="" v="" out=""
     for f in "$@"; do
         [[ -f "${f}" ]] || continue
         v="$(conf_value "${key}" "${f}")"
@@ -87,7 +87,7 @@ remote_nodes() {
 
 get_node_ip() {
     local node="$1"
-    local ip
+    local ip=""
     ip=$(grep -v '^\s*#' "${HOSTS_DIR}/local" \
         | awk -v h="${node}" '{ for(i=2;i<=NF;i++) if($i==h){ print $1; exit } }')
     if [[ -z "${ip}" ]]; then
@@ -139,7 +139,7 @@ EOF
 
 ensure_listen_conf() {
     local node="$1"
-    local ip
+    local ip=""
     ip=$(get_node_ip "${node}")
     if [[ "${node}" == "${SELF}" ]]; then
         printf 'listen-address = 127.0.0.1\nlisten-address = %s\n' "${ip}" \
@@ -219,7 +219,7 @@ cmd_logs() {
 cmd_tail_f() {
     local node="${1:-local}"
     if [[ "${node}" == "remote" ]]; then
-        local rnode
+        local rnode=""
         rnode=$(remote_nodes | head -1)
         exec ssh -o ServerAliveInterval=15 "root@${rnode}" "tail -F '${LOG_FILE}' 2>/dev/null"
     fi
@@ -234,7 +234,7 @@ cmd_stats() {
     local period="${2:-all}"
 
     if [[ "${node}" == "remote" ]]; then
-        local rnode
+        local rnode=""
         rnode=$(remote_nodes | head -1)
         # ${period} is expanded here on purpose, the remote node gets a literal.
         # shellcheck disable=SC2029
@@ -357,7 +357,7 @@ node_up() {
 # ignores pure attribute / directory lines (starting with '.') — only real
 # content changes remain.
 node_in_sync() {
-    local node="$1" f
+    local node="$1" f=""
     if rsync -nic -a --delete --exclude='listen.conf' \
             "${DNSMASQ_D}/" "root@${node}:${DNSMASQ_D}/" 2>/dev/null | grep -qvE '^\.'; then
         return 1
@@ -376,7 +376,7 @@ node_in_sync() {
 # listen.conf is excluded: it is regenerated on every sync, so its mtime would
 # otherwise raise a permanent false alarm.
 restart_needed_local() {
-    local newest start
+    local newest="" start=""
     newest=$( { find "${DNSMASQ_D}" -maxdepth 1 -type f -name '*.conf' ! -name 'listen.conf' -printf '%T@\n'
                 find "${HOSTS_DIR}" -maxdepth 1 -type f -printf '%T@\n'; } 2>/dev/null | sort -rn | head -1)
     [[ -z "${newest}" ]] && return 1
@@ -399,7 +399,7 @@ cmd_node_report() {
 # cache: a node that is down must not silently widen what the UI offers.
 # $@ holds one "<node>TAB<version>TAB<features>TAB<options>" record per node.
 write_build_cache() {
-    local tmp
+    local tmp=""
     mkdir -p "$(dirname "${BUILD_CACHE}")"
     # The replace below is atomic, so a temporary that is still around minutes
     # later belongs to a run that was killed between writing and renaming it.
@@ -432,7 +432,7 @@ configured_keys() {
 #                                       dnsmasq, which would then refuse to start
 # Unreachable nodes are skipped — the Dashboard's status dot covers liveness.
 cmd_health() {
-    local node report version features options key conf_keys
+    local node="" report="" version="" features="" options="" key="" conf_keys=""
     local sync_stale=() restart_nodes=() records=() versions=() featsets=() unknown=()
 
     conf_keys=$(configured_keys)
@@ -479,7 +479,7 @@ cmd_health() {
 # Human-readable list of what a sync would change on each remote node — the
 # detail behind health's sync=stale. Prints changed paths, not rsync's codes.
 cmd_diff() {
-    local node f any line
+    local node="" f="" any="" line=""
     while IFS= read -r node; do
         echo "=== ${node} ==="
         if ! node_up "${node}"; then
